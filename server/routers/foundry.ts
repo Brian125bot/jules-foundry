@@ -11,6 +11,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
 const healthLabels = ["healthy", "stale", "attention", "terminal"] as const;
 const terminalJulesStates = new Set(["COMPLETED", "FAILED"]);
+const activeInitiativeStates = new Set(["dispatched", "plan_gate", "executing"]);
 
 export const dispatchAttemptKey = (taskId: number, taskKey: string) => `dispatch:${taskId}:${taskKey}`;
 export const pollAttemptKey = (taskId: number, bucket: number) => `poll:${taskId}:${bucket}`;
@@ -20,6 +21,11 @@ export const ESTIMATED_CENTS_PER_PROVIDER_CALL = 1;
 export function resolveCredentialWriteTarget(selectedCredentialId: number | undefined, matchingCredentialId: number | undefined) {
   if (matchingCredentialId && matchingCredentialId !== selectedCredentialId) return { targetId: matchingCredentialId, redundantId: selectedCredentialId ?? null };
   return { targetId: selectedCredentialId ?? matchingCredentialId ?? null, redundantId: null };
+}
+
+export function summarizeInitiativeDeletion(tasksForInitiative: Array<{ id: number; title: string; state: string; julesSessionName?: string | null }>) {
+  const activeSessions = tasksForInitiative.filter(task => Boolean(task.julesSessionName) && activeInitiativeStates.has(task.state));
+  return { taskCount: tasksForInitiative.length, activeSessions, canDelete: activeSessions.length === 0 };
 }
 
 function userId(ctx: { user: { id: number } | null }) {
@@ -209,6 +215,35 @@ export const foundryRouter = router({
       const db = requireDb(await getDb());
       const result = await db.insert(initiatives).values({ ...input, userId: userId(ctx) });
       return { id: Number(result[0].insertId) };
+    }),
+    deletePreview: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = requireDb(await getDb());
+      const initiative = await getInitiativeForUser(userId(ctx), input.initiativeId);
+      if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
+      const initiativeTasks = await db.select({ id: tasks.id, title: tasks.title, state: tasks.state, julesSessionName: tasks.julesSessionName }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
+      return { initiative: { id: initiative.id, title: initiative.title, repository: initiative.repository, branch: initiative.branch }, ...summarizeInitiativeDeletion(initiativeTasks) };
+    }),
+    remove: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive(), confirmation: z.string().min(1).max(180) })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb());
+      const user = userId(ctx);
+      const initiative = await getInitiativeForUser(user, input.initiativeId);
+      if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
+      if (input.confirmation !== initiative.title) throw new TRPCError({ code: "BAD_REQUEST", message: "Type the initiative title exactly to confirm deletion." });
+      const initiativeTasks = await db.select({ id: tasks.id, title: tasks.title, state: tasks.state, julesSessionName: tasks.julesSessionName }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
+      const summary = summarizeInitiativeDeletion(initiativeTasks);
+      if (!summary.canDelete) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Cannot delete while ${summary.activeSessions.length} Jules session${summary.activeSessions.length === 1 ? " is" : "s are"} active. Wait for completion or resolve the session first.` });
+      const taskIds = initiativeTasks.map(task => task.id);
+      await db.transaction(async tx => {
+        if (taskIds.length) {
+          await tx.delete(taskApprovals).where(inArray(taskApprovals.taskId, taskIds));
+          await tx.delete(taskAttempts).where(inArray(taskAttempts.taskId, taskIds));
+          await tx.delete(taskEvents).where(inArray(taskEvents.taskId, taskIds));
+          await tx.delete(taskEvidence).where(inArray(taskEvidence.taskId, taskIds));
+          await tx.delete(tasks).where(inArray(tasks.id, taskIds));
+        }
+        await tx.delete(initiatives).where(and(eq(initiatives.id, initiative.id), eq(initiatives.userId, user)));
+      });
+      return { success: true, deletedTaskCount: taskIds.length };
     }),
     compile: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb());

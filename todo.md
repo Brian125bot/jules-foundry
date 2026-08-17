@@ -47,3 +47,7 @@
 - [x] Release path reservations when dispatch fails before a Jules session is created, so later tasks are not falsely blocked.
 - [x] Add regression coverage for dispatch failure state recovery and stale-reservation exclusion.
 - [x] Add a database-backed sibling-dispatch regression proving a pre-session failure releases an overlapping path reservation.
+- [x] Add safe initiative deletion that prevents removal while a Jules session is active and removes associated Foundry records only after confirmation.
+- [x] Build a clear destructive-action dialog with initiative impact details and a typed confirmation control.
+- [x] Add regression coverage and responsive visual validation for initiative deletion controls.
+- [ ] Open and visually verify the desktop and mobile deletion dialogs, including typed confirmation and active-session lock states.
