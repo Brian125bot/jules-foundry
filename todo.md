@@ -1,0 +1,34 @@
+# Project TODO
+
+- [x] Define database tables for credential metadata, initiatives, task DAG nodes, dispatch attempts, Jules session mappings, monitoring events, verification evidence, and approval actions.
+- [x] Add an encrypted, write-only credential-vault service that masks Jules, Gemini, and GitHub credentials after submission.
+- [x] Build credential dashboard flows to add, label, test, rotate, and delete Jules API keys, Gemini API keys, and fine-grained GitHub tokens.
+- [x] Implement a Gemini-backed prompt compiler that creates typed dependency-DAG task packets with acceptance criteria, risk tier, allowed paths, and non-goals.
+- [x] Implement GitHub source and branch validation before Jules task dispatch.
+- [x] Implement idempotent Jules session creation with selectable plan approval and AUTO_CREATE_PR modes.
+- [x] Persist and enforce idempotency keys for both dispatch and monitoring attempts.
+- [x] Build an append-only task-event ledger for local actions, Jules state transitions, activities, poll attempts, artifacts, approvals, and verification results.
+- [x] Add deterministic dependency resolution and cycle detection before a Gemini-compiled task graph is persisted.
+- [x] Expand the task-event ledger so poll attempts, individual artifacts, approvals, and verification outcomes are fully represented with provenance.
+- [x] Build the Fleet observatory with exact health labels: healthy, stale, attention, and terminal.
+- [x] Build a per-task mission timeline with activities, artifacts, session metadata, health alerts, poll history, PR link, and attempt/cost ledger.
+- [x] Implement monitoring reconciliation for non-terminal sessions and staleness/alert detection.
+- [x] Build plan approval actions to approve, reject, or send corrective messages with attribution.
+- [x] Build evidence and verification views with exact criterion labels: proven, partial, unproven, and contradicted.
+- [x] Generate an exportable task-level evidence dossier without exposing stored credentials.
+- [x] Build an initiative graph visualizing DAG dependencies, reservation conflicts, dispatch order, blocked reasons, completion, and evidence debt.
+- [x] Write and run Vitest coverage for credential masking, task compilation validation, idempotency, health derivation, and evidence dossier output.
+- [x] Visually verify desktop and mobile dashboard layouts and correct accessibility or layout defects.
+- [x] Save a final production-ready checkpoint after all completed items are marked done.
+- [x] Add task age to the Fleet observatory table.
+- [x] Add a visible per-task attempts/cost ledger and explicit poll-history section to the mission-detail view.
+- [x] Surface all blocked reasons explicitly in the initiative graph task cards.
+- [x] Add Vitest coverage for health derivation and evidence-dossier output.
+- [x] Run and correct a mobile-viewport visual verification pass.
+- [x] Save the final production-ready checkpoint after the completion backlog is accurate.
+- [x] Add an explicit per-attempt provider-spend field to the operations ledger alongside API-call counts and task budget.
+- [x] Populate per-attempt estimated spend with a documented provider-call estimate and verify its display in the task ledger.
+- [x] Add product-facing spend-estimate guidance and automated coverage for the provider-call estimation rule.
+- [ ] Validate populated ledger rows through a live provider-backed task after credentials are configured.
+- [x] Add a distinct poll-history section plus per-attempt API-call and cost-facing fields to the task ledger.
+- [ ] Save the final production-ready checkpoint after the expanded ledger and completion backlog are verified.
