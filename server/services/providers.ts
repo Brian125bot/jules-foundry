@@ -16,6 +16,30 @@ const compiledTaskSchema = z.object({
 
 export const compiledInitiativeSchema = z.object({ tasks: z.array(compiledTaskSchema).min(1).max(12) });
 export type CompiledInitiative = z.infer<typeof compiledInitiativeSchema>;
+const rawCompiledTaskSchema = compiledTaskSchema.extend({ allowedPaths: z.array(z.string().min(1)).max(12).optional() });
+const rawCompiledInitiativeSchema = z.object({ tasks: z.array(rawCompiledTaskSchema).min(1).max(12) });
+export const SCOPE_REVIEW_PATH = "__SCOPE_REVIEW_REQUIRED__";
+export const requiresScopeReview = (allowedPaths: string[]) => allowedPaths.includes(SCOPE_REVIEW_PATH);
+
+/**
+ * Gemini can occasionally emit an empty allowedPaths array even when the response schema asks for one.
+ * Preserve the packet for review, but never widen scope silently: the sentinel triggers a dispatch block.
+ */
+export function normalizeCompiledInitiative(input: unknown): CompiledInitiative {
+  const raw = rawCompiledInitiativeSchema.parse(input);
+  return compiledInitiativeSchema.parse({
+    tasks: raw.tasks.map(task => {
+      const normalizedPaths = task.allowedPaths?.map(path => path.trim()).filter(Boolean) ?? [];
+      if (normalizedPaths.length > 0) return { ...task, allowedPaths: normalizedPaths };
+      return {
+        ...task,
+        riskTier: "red" as const,
+        allowedPaths: [SCOPE_REVIEW_PATH],
+        nonGoals: Array.from(new Set([...task.nonGoals, "Do not modify repository files until allowed paths are explicitly reviewed."])),
+      };
+    }),
+  });
+}
 
 const geminiResponseSchema = {
   type: "OBJECT",
@@ -77,7 +101,7 @@ export async function testCredential(provider: "jules" | "gemini" | "github", se
 
 export async function compileWithGemini(secret: string, input: { prompt: string; repository: string; branch: string }) {
   try {
-    const instruction = `You are a senior software delivery planner. Compile the request into an ordered dependency DAG of focused coding tasks. Repository: ${input.repository}; target branch: ${input.branch}. Every task must specify concrete allowed paths, non-goals, acceptance criteria, and dependencies by task title. Avoid implementation steps that access production secrets or perform destructive operations. User request:\n${input.prompt}`;
+    const instruction = `You are a senior software delivery planner. Compile the request into an ordered dependency DAG of focused coding tasks. Repository: ${input.repository}; target branch: ${input.branch}. Every task must specify concrete, non-empty repository-relative allowed paths, non-goals, acceptance criteria, and dependencies by task title. Never return an empty allowedPaths array. Avoid implementation steps that access production secrets or perform destructive operations. User request:\n${input.prompt}`;
     const response = await axios.post(
       `${GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(secret)}`,
       {
@@ -88,7 +112,7 @@ export async function compileWithGemini(secret: string, input: { prompt: string;
     );
     const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Gemini returned no structured task graph.");
-    return compiledInitiativeSchema.parse(JSON.parse(text));
+    return normalizeCompiledInitiative(JSON.parse(text));
   } catch (error) {
     throw providerError(error);
   }

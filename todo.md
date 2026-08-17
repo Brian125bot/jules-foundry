@@ -31,7 +31,12 @@
 - [x] Add product-facing spend-estimate guidance and automated coverage for the provider-call estimation rule.
 - [ ] Validate populated ledger rows through a live provider-backed task after credentials are configured.
 - [x] Add a distinct poll-history section plus per-attempt API-call and cost-facing fields to the task ledger.
-- [ ] Save the final production-ready checkpoint after the expanded ledger and completion backlog are verified.
+- [x] Save the final production-ready checkpoint after the expanded ledger and completion backlog are verified.
 - [x] Fix credential-vault create and rotate failures caused by database constraints, while preserving write-only secret handling.
 - [x] Add regression coverage for credential profile creation and rotation persistence.
 - [x] Add router/database-level credential create, rotate, duplicate-upsert, and consolidation regression coverage without exposing raw secrets.
+- [x] Normalize or repair Gemini task packets that omit allowed paths before persistence, without expanding task scope silently.
+- [x] Add regression coverage for malformed Gemini task packets with missing allowed paths.
+- [x] Quarantine Gemini task packets where allowed paths are absent as well as empty.
+- [x] Add regression coverage for omitted allowed paths and scope-review dispatch blocking.
+- [x] Add a router/database-level test proving scope-review tasks are blocked before any Jules dispatch call.

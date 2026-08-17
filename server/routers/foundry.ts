@@ -5,7 +5,7 @@ import { z } from "zod";
 import { credentialProfiles, initiatives, taskApprovals, taskAttempts, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
 import { getCredentialById, getCredentialProfiles, getCredentialSecret, getDb, getInitiativeForUser, getTaskForUser, getTaskTimeline, requireDb } from "../db";
 import { digestPayload, decryptSecret, encryptSecret, maskSecret } from "../services/vault";
-import { approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, messageJulesSession, pollJulesSession, testCredential, validateGitHubBranch } from "../services/providers";
+import { approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, messageJulesSession, pollJulesSession, requiresScopeReview, testCredential, validateGitHubBranch } from "../services/providers";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
@@ -274,6 +274,12 @@ export const foundryRouter = router({
       try {
         const activeSiblings = await db.select().from(tasks).where(and(eq(tasks.initiativeId, record.task.initiativeId), inArray(tasks.state, ["reserved", "dispatched", "plan_gate", "executing"]))).orderBy(desc(tasks.updatedAt));
         const allowedPaths = parseList(record.task.allowedPaths) as string[];
+        if (requiresScopeReview(allowedPaths)) {
+          const message = "Task scope requires review because Gemini did not provide concrete allowed paths. Recompile the initiative with specific repository paths before dispatching.";
+          await db.update(tasks).set({ state: "blocked", health: "attention", blockedReason: message }).where(eq(tasks.id, record.task.id));
+          await recordEvent(record.task.id, "gemini", "scope_review_required", message, { allowedPaths });
+          throw new Error(message);
+        }
         const conflictingTask = activeSiblings.find(sibling => sibling.id !== record.task.id && (parseList(sibling.allowedPaths) as string[]).some(path => allowedPaths.includes(path)));
         if (conflictingTask) {
           const message = `Reservation conflict with active task '${conflictingTask.title}' on shared allowed paths.`;
