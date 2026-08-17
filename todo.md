@@ -51,3 +51,4 @@
 - [x] Build a clear destructive-action dialog with initiative impact details and a typed confirmation control.
 - [x] Add regression coverage and responsive visual validation for initiative deletion controls.
 - [ ] Open and visually verify the desktop and mobile deletion dialogs, including typed confirmation and active-session lock states.
+- [x] Plan granular per-dispatch session control, tracking, safety, testing, and rollout capabilities for Jules Foundry.
