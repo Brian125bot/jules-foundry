@@ -68,8 +68,36 @@ describe("Jules source discovery", () => {
 
     await expect(caller.foundry.dispatch.run({ taskId, requirePlanApproval: true, autoCreatePr: true })).rejects.toThrow(/connect this GitHub repository/i);
     const task = (await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1))[0];
-    expect(task).toMatchObject({ state: "reserved", health: "attention" });
+    expect(task).toMatchObject({ state: "ready", health: "attention", reservationConflict: null, blockedReason: null });
     expect(task?.julesSessionName).toBeNull();
     expect(task?.lastError).toContain("connect this GitHub repository");
+    const events = await db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId));
+    expect(events.some(event => event.eventType === "reservation_released")).toBe(true);
+  });
+});
+
+describe("released reservation exclusion", () => {
+  it("does not block an overlapping sibling after the first task fails before session creation", async () => {
+    const db = await getDb();
+    if (!db) return;
+    getMock.mockImplementation(async url => {
+      if (String(url).startsWith("https://api.github.com/repos/")) return { data: { name: "main" } } as never;
+      if (String(url).endsWith("/sources")) return { data: { sources: [] } } as never;
+      throw new Error(`Unexpected request: ${String(url)}`);
+    });
+    const caller = appRouter.createCaller(context());
+    await caller.foundry.credentials.save({ provider: "jules", label: "release-test-jules", secret: "release-test-jules-key" });
+    await caller.foundry.credentials.save({ provider: "github", label: "release-test-github", secret: "release-test-github-token" });
+    const initiativeResult = await db.insert(initiatives).values({ userId: sourceTestUserId, title: "Reservation release regression", prompt: "Regression task", repository: "brian125bot/getit", branch: "main", budgetCents: 100 });
+    const initiativeId = Number(initiativeResult[0].insertId);
+    const makeTask = async (title: string, key: string) => Number((await db.insert(tasks).values({ initiativeId, taskKey: key, title, description: "An overlapping task that must reach provider validation after sibling failure.", riskTier: "green", allowedPaths: JSON.stringify(["README.md"]), nonGoals: JSON.stringify(["Do not create a session without a source."]), acceptanceCriteria: JSON.stringify([{ id: "AC-1", text: "The task reaches source validation." }]), dependencies: JSON.stringify([]), idempotencyKey: `${key}-dispatch` }))[0].insertId);
+    const firstTaskId = await makeTask("First overlapping task", "release-first");
+    const secondTaskId = await makeTask("Second overlapping task", "release-second");
+
+    await expect(caller.foundry.dispatch.run({ taskId: firstTaskId, requirePlanApproval: true, autoCreatePr: true })).rejects.toThrow(/connect this GitHub repository/i);
+    await expect(caller.foundry.dispatch.run({ taskId: secondTaskId, requirePlanApproval: true, autoCreatePr: true })).rejects.toThrow(/connect this GitHub repository/i);
+    const secondTask = (await db.select().from(tasks).where(eq(tasks.id, secondTaskId)).limit(1))[0];
+    expect(secondTask).toMatchObject({ state: "ready", reservationConflict: null });
+    expect(secondTask?.lastError).not.toMatch(/Reservation conflict/);
   });
 });

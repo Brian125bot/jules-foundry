@@ -271,6 +271,8 @@ export const foundryRouter = router({
       const attempt = await createAttempt(record.task.id, "dispatch", key);
       if (attempt.reused) return { reused: true, sessionName: record.task.julesSessionName };
       const started = Date.now();
+      let reservationGranted = false;
+      let sessionCreated = false;
       try {
         const activeSiblings = await db.select().from(tasks).where(and(eq(tasks.initiativeId, record.task.initiativeId), inArray(tasks.state, ["reserved", "dispatched", "plan_gate", "executing"]))).orderBy(desc(tasks.updatedAt));
         const allowedPaths = parseList(record.task.allowedPaths) as string[];
@@ -288,6 +290,7 @@ export const foundryRouter = router({
           throw new Error(message);
         }
         await db.update(tasks).set({ state: "reserved", health: "healthy", reservationConflict: null, blockedReason: null }).where(eq(tasks.id, record.task.id));
+        reservationGranted = true;
         await recordEvent(record.task.id, "local", "reservation_granted", "Path reservation granted before Jules dispatch.", { allowedPaths });
         const [julesSecret, githubSecret] = await Promise.all([requireReadySecret(user, "jules"), requireReadySecret(user, "github")]);
         const branchCheck = await validateGitHubBranch(githubSecret, record.initiative.repository, record.initiative.branch);
@@ -296,13 +299,16 @@ export const foundryRouter = router({
         if (!source.ok) throw new Error(source.message);
         const packet = `Task: ${record.task.title}\n\nGoal: ${record.task.description}\n\nAllowed paths: ${record.task.allowedPaths}\n\nNon-goals: ${record.task.nonGoals}\n\nAcceptance criteria: ${record.task.acceptanceCriteria}\n\nStay within scope. Report ambiguity instead of expanding scope.`;
         const session = await createJulesSession(julesSecret, { prompt: packet, title: record.task.title, sourceName: source.sourceName, branch: record.initiative.branch, requirePlanApproval: input.requirePlanApproval, autoCreatePr: input.autoCreatePr });
+        sessionCreated = true;
         await db.update(tasks).set({ state: "dispatched", health: "healthy", requirePlanApproval: input.requirePlanApproval ? 1 : 0, autoCreatePr: input.autoCreatePr ? 1 : 0, julesSessionName: session.name, julesSessionId: session.id, julesSessionUrl: session.url, julesState: session.state ?? "QUEUED", lastPolledAt: new Date() }).where(eq(tasks.id, record.task.id));
         await recordEvent(record.task.id, "local", "dispatched", "Validated source and branch, then created a Jules session.", { source: source.sourceName, sessionName: session.name, autoCreatePr: input.autoCreatePr });
         await finishAttempt(attempt.attempt.id, "success", started, { sessionName: session.name });
         return { reused: false, sessionName: session.name, sessionUrl: session.url };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Dispatch failed";
-        await db.update(tasks).set({ health: "attention", lastError: message.slice(0, 500) }).where(eq(tasks.id, record.task.id));
+        const releaseReservation = reservationGranted && !sessionCreated;
+        await db.update(tasks).set({ health: "attention", lastError: message.slice(0, 500), ...(releaseReservation ? { state: "ready" as const, reservationConflict: null, blockedReason: null } : {}) }).where(eq(tasks.id, record.task.id));
+        if (releaseReservation) await recordEvent(record.task.id, "local", "reservation_released", "Released path reservation because dispatch failed before a Jules session was created.", { message });
         await recordEvent(record.task.id, "local", "dispatch_failed", message, { message });
         await finishAttempt(attempt.attempt.id, "failure", started, { message }, "validation or provider request failed");
         throw new TRPCError({ code: "BAD_REQUEST", message });

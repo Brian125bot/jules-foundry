@@ -44,3 +44,6 @@
 - [x] Add regression coverage for Jules source discovery and source-connection error guidance.
 - [x] Add provider-level tests for paginated source discovery, missing-source, and branch-unavailable guidance.
 - [x] Add a dispatch-path regression test proving source failures persist actionable guidance to the task error state.
+- [x] Release path reservations when dispatch fails before a Jules session is created, so later tasks are not falsely blocked.
+- [x] Add regression coverage for dispatch failure state recovery and stale-reservation exclusion.
+- [x] Add a database-backed sibling-dispatch regression proving a pre-session failure releases an overlapping path reservation.
