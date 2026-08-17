@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCompiledInitiative, requiresScopeReview, SCOPE_REVIEW_PATH } from "./services/providers";
+import { matchJulesSource, missingJulesSourceMessage, normalizeCompiledInitiative, requiresScopeReview, SCOPE_REVIEW_PATH } from "./services/providers";
 
 describe("Gemini task-packet normalization", () => {
   it("quarantines an empty allowed-paths array instead of failing or broadening task scope", () => {
@@ -34,5 +34,14 @@ describe("Gemini task-packet normalization", () => {
     expect(allowedPaths).toEqual([SCOPE_REVIEW_PATH]);
     expect(requiresScopeReview(allowedPaths)).toBe(true);
     expect(requiresScopeReview(["server/routes.ts"])).toBe(false);
+  });
+});
+
+describe("Jules source discovery", () => {
+  it("matches connected repositories case-insensitively and provides actionable connection guidance when absent", () => {
+    const source = matchJulesSource([{ name: "sources/github-brian125bot-getit", id: "github-brian125bot-getit", githubRepo: { owner: "Brian125Bot", repo: "GetIt" } }], "brian125bot/getit");
+    expect(source?.name).toBe("sources/github-brian125bot-getit");
+    expect(missingJulesSourceMessage("brian125bot/getit")).toContain("connect this GitHub repository");
+    expect(missingJulesSourceMessage("brian125bot/getit")).toContain("cannot create a repository connection");
   });
 });

@@ -79,6 +79,20 @@ function providerError(error: unknown) {
   return error instanceof Error ? error : new Error("Provider request failed.");
 }
 
+type JulesSourceSummary = { name?: string; id?: string; githubRepo?: { owner?: string; repo?: string; branches?: Array<{ displayName?: string }> } };
+
+export function matchJulesSource(sources: JulesSourceSummary[], repository: string) {
+  const [owner = "", repo = ""] = repository.trim().split("/");
+  const ownerKey = owner.toLowerCase();
+  const repoKey = repo.toLowerCase();
+  return sources.find(source => source.githubRepo?.owner?.toLowerCase() === ownerKey && source.githubRepo?.repo?.toLowerCase() === repoKey)
+    ?? sources.find(source => source.name?.toLowerCase() === `sources/github-${ownerKey}-${repoKey}` || source.id?.toLowerCase() === `github-${ownerKey}-${repoKey}`);
+}
+
+export function missingJulesSourceMessage(repository: string) {
+  return `Jules has no connected source for '${repository}'. In the Jules web app, connect this GitHub repository to the same Google account as this API key, then retry dispatch. The Jules API can read sources but cannot create a repository connection.`;
+}
+
 export async function testCredential(provider: "jules" | "gemini" | "github", secret: string) {
   try {
     if (provider === "jules") {
@@ -132,13 +146,18 @@ export async function validateGitHubBranch(secret: string, repository: string, b
 
 export async function findJulesSource(secret: string, repository: string, branch: string) {
   try {
-    const response = await axios.get(`${JULES_BASE_URL}/sources?pageSize=100`, { headers: { "x-goog-api-key": secret }, timeout: 15000 });
-    const [owner, repo] = repository.split("/");
-    const source = (response.data?.sources ?? []).find((item: any) => item.githubRepo?.owner === owner && item.githubRepo?.repo === repo);
-    if (!source) return { ok: false as const, message: "The repository is not connected as a Jules source." };
+    const sources: JulesSourceSummary[] = [];
+    let pageToken: string | undefined;
+    do {
+      const response = await axios.get(`${JULES_BASE_URL}/sources`, { headers: { "x-goog-api-key": secret }, params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, timeout: 15000 });
+      sources.push(...(response.data?.sources ?? []));
+      pageToken = response.data?.nextPageToken;
+    } while (pageToken);
+    const source = matchJulesSource(sources, repository);
+    if (!source?.name) return { ok: false as const, message: missingJulesSourceMessage(repository) };
     const branches = source.githubRepo?.branches?.map((item: any) => item.displayName) ?? [];
-    if (branches.length > 0 && !branches.includes(branch)) return { ok: false as const, message: "The selected branch is not available in the Jules source." };
-    return { ok: true as const, sourceName: source.name as string };
+    if (branches.length > 0 && !branches.includes(branch)) return { ok: false as const, message: `Jules source '${repository}' is connected, but branch '${branch}' is unavailable. Refresh the repository connection in Jules or choose a listed branch.` };
+    return { ok: true as const, sourceName: source.name };
   } catch (error) {
     return { ok: false as const, message: providerError(error).message };
   }

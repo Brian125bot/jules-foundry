@@ -40,3 +40,7 @@
 - [x] Quarantine Gemini task packets where allowed paths are absent as well as empty.
 - [x] Add regression coverage for omitted allowed paths and scope-review dispatch blocking.
 - [x] Add a router/database-level test proving scope-review tasks are blocked before any Jules dispatch call.
+- [x] Improve Jules source matching for connected repositories and provide actionable source-connection guidance on dispatch failure.
+- [x] Add regression coverage for Jules source discovery and source-connection error guidance.
+- [x] Add provider-level tests for paginated source discovery, missing-source, and branch-unavailable guidance.
+- [x] Add a dispatch-path regression test proving source failures persist actionable guidance to the task error state.
