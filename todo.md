@@ -32,3 +32,6 @@
 - [ ] Validate populated ledger rows through a live provider-backed task after credentials are configured.
 - [x] Add a distinct poll-history section plus per-attempt API-call and cost-facing fields to the task ledger.
 - [ ] Save the final production-ready checkpoint after the expanded ledger and completion backlog are verified.
+- [x] Fix credential-vault create and rotate failures caused by database constraints, while preserving write-only secret handling.
+- [x] Add regression coverage for credential profile creation and rotation persistence.
+- [x] Add router/database-level credential create, rotate, duplicate-upsert, and consolidation regression coverage without exposing raw secrets.

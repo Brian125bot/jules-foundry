@@ -17,6 +17,11 @@ export const pollAttemptKey = (taskId: number, bucket: number) => `poll:${taskId
 /** Conservative planning estimate only; never a substitute for provider-issued billing. */
 export const ESTIMATED_CENTS_PER_PROVIDER_CALL = 1;
 
+export function resolveCredentialWriteTarget(selectedCredentialId: number | undefined, matchingCredentialId: number | undefined) {
+  if (matchingCredentialId && matchingCredentialId !== selectedCredentialId) return { targetId: matchingCredentialId, redundantId: selectedCredentialId ?? null };
+  return { targetId: selectedCredentialId ?? matchingCredentialId ?? null, redundantId: null };
+}
+
 function userId(ctx: { user: { id: number } | null }) {
   if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
   return ctx.user.id;
@@ -150,13 +155,23 @@ export const foundryRouter = router({
     save: protectedProcedure.input(credentialInput.extend({ credentialId: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb());
       const user = userId(ctx);
+      const nextValues = { provider: input.provider, label: input.label, encryptedSecret: encryptSecret(input.secret), maskedSecret: maskSecret(input.secret), status: "unverified" as const, lastError: null };
+      const matchingProfile = (await db.select().from(credentialProfiles).where(and(eq(credentialProfiles.userId, user), eq(credentialProfiles.provider, input.provider), eq(credentialProfiles.label, input.label))).limit(1))[0];
+      const target = resolveCredentialWriteTarget(input.credentialId, matchingProfile?.id);
+      if (target.targetId && target.targetId !== input.credentialId) {
+        const winner = await getCredentialById(user, target.targetId);
+        if (!winner) throw new TRPCError({ code: "NOT_FOUND" });
+        await db.update(credentialProfiles).set({ ...nextValues, version: winner.version + 1 }).where(eq(credentialProfiles.id, winner.id));
+        if (target.redundantId) await db.delete(credentialProfiles).where(and(eq(credentialProfiles.id, target.redundantId), eq(credentialProfiles.userId, user)));
+        return { id: winner.id, updated: true, consolidated: Boolean(target.redundantId) };
+      }
       if (input.credentialId) {
         const existing = await getCredentialById(user, input.credentialId);
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
-        await db.update(credentialProfiles).set({ label: input.label, encryptedSecret: encryptSecret(input.secret), maskedSecret: maskSecret(input.secret), status: "unverified", lastError: null, version: existing.version + 1 }).where(eq(credentialProfiles.id, existing.id));
+        await db.update(credentialProfiles).set({ ...nextValues, version: existing.version + 1 }).where(eq(credentialProfiles.id, existing.id));
         return { id: existing.id, updated: true };
       }
-      const result = await db.insert(credentialProfiles).values({ userId: user, provider: input.provider, label: input.label, encryptedSecret: encryptSecret(input.secret), maskedSecret: maskSecret(input.secret) });
+      const result = await db.insert(credentialProfiles).values({ userId: user, ...nextValues });
       return { id: Number(result[0].insertId), updated: false };
     }),
     test: protectedProcedure.input(z.object({ credentialId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {

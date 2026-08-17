@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret, maskSecret } from "./services/vault";
-import { buildDossierMarkdown, deriveHealth, dispatchAttemptKey, ESTIMATED_CENTS_PER_PROVIDER_CALL, pollAttemptKey, validateCompiledDag } from "./routers/foundry";
+import { buildDossierMarkdown, deriveHealth, dispatchAttemptKey, ESTIMATED_CENTS_PER_PROVIDER_CALL, pollAttemptKey, resolveCredentialWriteTarget, validateCompiledDag } from "./routers/foundry";
 
 describe("credential vault primitives", () => {
   it("round-trips a secret without using the masked value as storage", () => {
@@ -60,5 +60,13 @@ describe("monitoring health and evidence dossier", () => {
 describe("cost estimate rule", () => {
   it("uses a visible conservative one-cent planning estimate per external provider call", () => {
     expect(ESTIMATED_CENTS_PER_PROVIDER_CALL).toBe(1);
+  });
+});
+
+describe("credential profile conflict resolution", () => {
+  it("consolidates a rotated profile into an existing provider-label target instead of violating uniqueness", () => {
+    expect(resolveCredentialWriteTarget(3, 1)).toEqual({ targetId: 1, redundantId: 3 });
+    expect(resolveCredentialWriteTarget(3, 3)).toEqual({ targetId: 3, redundantId: null });
+    expect(resolveCredentialWriteTarget(undefined, undefined)).toEqual({ targetId: null, redundantId: null });
   });
 });
