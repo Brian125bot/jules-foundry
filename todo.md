@@ -87,3 +87,7 @@
 - [x] Add router-level monitor-checkpoint regression coverage for success, failure backoff, and provider-activity deduplication.
 - [x] Add provider-boundary and desktop control-plane coverage for critical operational workflows.
 - [x] Run and record complete static, test, and production-build verification for the expanded suite.
+- [x] Define the supported Gemini model catalog and default selection policy for initiative-scoped inference.
+- [x] Persist the selected Gemini model and validate it against the credential’s live Gemini model catalog before inference.
+- [x] Expose a desktop model selector in initiative composition and retain the selected model in planning and Quality Mesh provenance.
+- [x] Add regression coverage and release verification for Gemini model selection, fallback, and availability safeguards.

@@ -5,9 +5,10 @@ import { z } from "zod";
 import { credentialProfiles, initiatives, qualityContracts, qualityPrompts, qualityRecoveries, qualityVerifications, sessionControls, sessionMonitorCheckpoints, taskApprovals, taskAttempts, taskControlLeases, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
 import { getCredentialById, getCredentialProfiles, getCredentialSecret, getDb, getInitiativeForUser, getTaskForUser, getTaskTimeline, requireDb } from "../db";
 import { digestPayload, decryptSecret, encryptSecret, maskSecret } from "../services/vault";
-import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, deleteJulesSession, findJulesSource, generateQualityContract, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
+import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, deleteJulesSession, findJulesSource, generateQualityContract, listGeminiModels, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
 import { buildDeterministicProofMap, buildProofCarryingPrompt, canDispatchWithQualityContract, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict, isQualityVerificationEligible } from "../services/quality";
 import { controlAvailability, controlPreconditionSnapshot, nextPollDelaySeconds, sessionControlKey, type SessionControlType } from "../services/session-control";
+import { DEFAULT_GEMINI_MODEL, assertGeminiModelAvailable, isSupportedGeminiModel } from "../services/gemini-models";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
@@ -88,6 +89,14 @@ async function requireReadySecret(user: number, provider: "jules" | "gemini" | "
   const credential = await getCredentialSecret(user, provider);
   if (!credential) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Add a ${provider} credential in the vault before continuing.` });
   return decryptSecret(credential.encryptedSecret);
+}
+
+async function resolveGeminiModel(user: number, selectedModel: string) {
+  if (!isSupportedGeminiModel(selectedModel)) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose one of the supported Gemini models." });
+  const secret = await requireReadySecret(user, "gemini");
+  const available = await listGeminiModels(secret);
+  try { return { secret, model: assertGeminiModelAvailable(selectedModel, available) }; }
+  catch (error) { throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : "Selected Gemini model is unavailable." }); }
 }
 
 async function recordEvent(taskId: number, source: "local" | "jules" | "github" | "gemini", eventType: string, summary: string, metadata?: unknown, transition?: { previous?: string | null; next?: string | null }, providerActivityId?: string | null) {
@@ -237,7 +246,7 @@ export const foundryRouter = router({
         return { ...task, allowedPaths: parseList(task.allowedPaths), nonGoals: parseList(task.nonGoals), acceptanceCriteria: criteria, dependencies: parseList(task.dependencies), evidenceDebt };
       }) }));
     }),
-    create: protectedProcedure.input(z.object({ title: z.string().min(3).max(180), prompt: z.string().min(20).max(12000), repository: z.string().regex(/^[^/]+\/[^/]+$/), branch: z.string().min(1).max(255), baseSha: z.string().max(80).optional(), budgetCents: z.number().int().min(10).max(500000).default(500) })).mutation(async ({ ctx, input }) => {
+    create: protectedProcedure.input(z.object({ title: z.string().min(3).max(180), prompt: z.string().min(20).max(12000), repository: z.string().regex(/^[^/]+\/[^/]+$/), branch: z.string().min(1).max(255), baseSha: z.string().max(80).optional(), budgetCents: z.number().int().min(10).max(500000).default(500), geminiModel: z.string().default(DEFAULT_GEMINI_MODEL).refine(isSupportedGeminiModel, "Choose a supported Gemini model.") })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb());
       const result = await db.insert(initiatives).values({ ...input, userId: userId(ctx) });
       return { id: Number(result[0].insertId) };
@@ -278,8 +287,8 @@ export const foundryRouter = router({
       if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
       const existingTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.initiativeId, initiative.id)).limit(1);
       if (existingTasks.length) throw new TRPCError({ code: "CONFLICT", message: "This initiative already has a compiled task graph." });
-      const secret = await requireReadySecret(user, "gemini");
-      const compiled = await compileWithGemini(secret, initiative);
+      const { secret, model } = await resolveGeminiModel(user, initiative.geminiModel);
+      const compiled = await compileWithGemini(secret, { ...initiative, geminiModel: model });
       validateCompiledDag(compiled.tasks);
       const insertTasks = compiled.tasks.map((task, index) => ({
         initiativeId: initiative.id, taskKey: nanoid(12), title: task.title, description: task.description, riskTier: task.riskTier,
@@ -290,7 +299,7 @@ export const foundryRouter = router({
         const inserted = await db.insert(tasks).values(task);
         const taskId = Number(inserted[0].insertId);
         taskResults.push({ id: taskId, index });
-        await recordEvent(taskId, "gemini", "task_compiled", "Gemini structured output passed deterministic dependency-DAG validation.", { dependencyCount: compiled.tasks[index].dependencies.length, riskTier: compiled.tasks[index].riskTier });
+        await recordEvent(taskId, "gemini", "task_compiled", "Gemini structured output passed deterministic dependency-DAG validation.", { dependencyCount: compiled.tasks[index].dependencies.length, riskTier: compiled.tasks[index].riskTier, geminiModel: model });
         for (const criterion of compiled.tasks[index].acceptanceCriteria) {
           await db.insert(taskEvidence).values({ taskId, criterionId: criterion.id, criterionText: criterion.text, status: "unproven", evidenceType: "verification", label: "No linked evidence yet", detail: "Criterion was created during task compilation and awaits evidence." });
         }
@@ -362,7 +371,7 @@ export const foundryRouter = router({
         if (!canDispatchWithQualityContract(contract?.decision)) throw new Error(`Quality contract v${contract!.version} requires an operator decision before dispatch.`);
         const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
         const draftPacket = buildProofCarryingPrompt({ title: record.task.title, description: record.task.description, allowedPaths, nonGoals: parseList(record.task.nonGoals), acceptanceCriteria: criteria });
-        const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", allowedPaths, nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
+        const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", geminiModel: record.initiative.geminiModel, allowedPaths, nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
         const promptDigest = digestPayload({ promptText: draftPacket, twin });
         const existingPrompt = (await db.select().from(qualityPrompts).where(eq(qualityPrompts.promptDigest, promptDigest)).limit(1))[0];
         const prompt = existingPrompt ?? (() => null)();
@@ -449,14 +458,14 @@ export const foundryRouter = router({
       const db = requireDb(await getDb()); const user = userId(ctx);
       const initiative = await getInitiativeForUser(user, input.initiativeId);
       if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
-      const secret = await requireReadySecret(user, "gemini");
-      const { contract, critic } = await generateQualityContract(secret, initiative);
+      const { secret, model } = await resolveGeminiModel(user, initiative.geminiModel);
+      const { contract, critic } = await generateQualityContract(secret, { ...initiative, geminiModel: model });
       const prior = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
       const decision = critic.recommendation === "human_review_required" ? "human_review" as const : critic.recommendation === "revise_before_dispatch" ? "revise" as const : "draft" as const;
-      const result = await db.insert(qualityContracts).values({ initiativeId: initiative.id, version: (prior?.version ?? 0) + 1, outcome: contract.outcome, contractJson: JSON.stringify(contract), criticJson: JSON.stringify(critic), ambiguityScore: critic.ambiguityScore, decision });
+      const result = await db.insert(qualityContracts).values({ initiativeId: initiative.id, version: (prior?.version ?? 0) + 1, outcome: contract.outcome, contractJson: JSON.stringify({ ...contract, geminiModel: model }), criticJson: JSON.stringify({ ...critic, geminiModel: model }), ambiguityScore: critic.ambiguityScore, decision });
       const contractId = Number(result[0].insertId);
       const initiativeTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
-      await Promise.all(initiativeTasks.map(task => recordEvent(task.id, "gemini", "quality_contract_generated", "Generated a bounded delivery contract and independent critique for operator review.", { contractId, version: (prior?.version ?? 0) + 1, ambiguityScore: critic.ambiguityScore, recommendation: critic.recommendation })));
+      await Promise.all(initiativeTasks.map(task => recordEvent(task.id, "gemini", "quality_contract_generated", "Generated a bounded delivery contract and independent critique for operator review.", { contractId, version: (prior?.version ?? 0) + 1, ambiguityScore: critic.ambiguityScore, recommendation: critic.recommendation, geminiModel: model })));
       return { id: contractId, version: (prior?.version ?? 0) + 1, decision, contract, critic };
     }),
     decideContract: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive(), contractId: z.number().int().positive(), decision: z.enum(["approved", "revise", "human_review"]) })).mutation(async ({ ctx, input }) => {
@@ -475,13 +484,13 @@ export const foundryRouter = router({
       const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
       const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
       const promptText = buildProofCarryingPrompt({ title: record.task.title, description: record.task.description, allowedPaths: parseList(record.task.allowedPaths), nonGoals: parseList(record.task.nonGoals), acceptanceCriteria: criteria });
-      const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", allowedPaths: parseList(record.task.allowedPaths), nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
+      const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", geminiModel: record.initiative.geminiModel, allowedPaths: parseList(record.task.allowedPaths), nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
       const promptDigest = digestPayload({ promptText, twin });
       const existing = (await db.select().from(qualityPrompts).where(eq(qualityPrompts.promptDigest, promptDigest)).limit(1))[0];
       if (existing) return { ...existing, reused: true };
       const result = await db.insert(qualityPrompts).values({ taskId: record.task.id, contractId: contract?.id ?? null, templateVersion: "proof-prompt-v1", promptDigest, promptText, twinJson: JSON.stringify(twin) });
       const prompt = { id: Number(result[0].insertId), taskId: record.task.id, promptDigest, promptText, templateVersion: "proof-prompt-v1", contractId: contract?.id ?? null, twinJson: JSON.stringify(twin), reused: false };
-      await recordEvent(record.task.id, "local", "quality_prompt_compiled", "Compiled a versioned proof-carrying prompt for operator-confirmed dispatch.", { promptDigest, contractId: contract?.id ?? null });
+      await recordEvent(record.task.id, "local", "quality_prompt_compiled", "Compiled a versioned proof-carrying prompt for operator-confirmed dispatch.", { promptDigest, contractId: contract?.id ?? null, geminiModel: record.initiative.geminiModel });
       return prompt;
     }),
     runVerification: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -495,12 +504,12 @@ export const foundryRouter = router({
       const attempt = await createAttempt(record.task.id, "verification", verificationKey);
       if (attempt.reused) { const prior = (await db.select().from(qualityVerifications).where(eq(qualityVerifications.taskId, record.task.id)).orderBy(desc(qualityVerifications.createdAt)).limit(1))[0]; if (prior) return { ...prior, reused: true }; }
       const started = Date.now(); let adversarial: unknown = null; let providerFailed = false;
-      try { const secret = await requireReadySecret(user, "gemini"); adversarial = await runAdversarialQualityReview(secret, { taskTitle: record.task.title, taskDescription: record.task.description, criteria: proofMap.map(item => ({ id: item.id, text: item.text, deterministicStatus: item.status })), evidence: timeline.evidence.map(item => ({ criterionId: item.criterionId, status: item.status, label: item.label, reference: item.reference, detail: item.detail })) }); }
+      try { const { secret, model } = await resolveGeminiModel(user, record.initiative.geminiModel); adversarial = await runAdversarialQualityReview(secret, { taskTitle: record.task.title, taskDescription: record.task.description, criteria: proofMap.map(item => ({ id: item.id, text: item.text, deterministicStatus: item.status })), evidence: timeline.evidence.map(item => ({ criterionId: item.criterionId, status: item.status, label: item.label, reference: item.reference, detail: item.detail })), geminiModel: model }); }
       catch (error) { providerFailed = true; adversarial = { materialFinding: false, summary: error instanceof Error ? error.message.slice(0, 500) : "Gemini review unavailable", criterionFindings: [], operatorQuestions: ["Re-run the bounded adversarial review after the Gemini credential or service is available."] }; }
       const adversarialMaterialFinding = Boolean((adversarial as { materialFinding?: boolean }).materialFinding);
       const verdict = deriveQualityVerdict({ providerFailed, deterministicPassed, criteria: proofMap, adversarialMaterialFinding });
       const summary = providerFailed ? "Deterministic proof map completed; bounded Gemini review was unavailable." : `Deterministic proof map completed with ${verdict.replaceAll("_", " ")} verdict.`;
-      const result = await db.insert(qualityVerifications).values({ taskId: record.task.id, verdict, deterministicJson: JSON.stringify({ deterministicPassed, proofMap }), evidenceJson: JSON.stringify(timeline.evidence), adversarialJson: JSON.stringify(adversarial), summary });
+      const result = await db.insert(qualityVerifications).values({ taskId: record.task.id, verdict, deterministicJson: JSON.stringify({ deterministicPassed, proofMap, geminiModel: record.initiative.geminiModel }), evidenceJson: JSON.stringify(timeline.evidence), adversarialJson: JSON.stringify(adversarial), summary });
       await recordEvent(record.task.id, "local", "quality_verification_completed", summary, { verificationId: Number(result[0].insertId), verdict, deterministicPassed, providerFailed });
       await finishAttempt(attempt.attempt.id, providerFailed ? "failure" : "success", started, { verdict, deterministicPassed, providerFailed }, providerFailed ? "bounded Gemini review unavailable" : undefined);
       return { id: Number(result[0].insertId), verdict, deterministic: { deterministicPassed, proofMap }, adversarial, reused: false };
@@ -513,7 +522,7 @@ export const foundryRouter = router({
       const deterministic = verification ? parseList(verification.deterministicJson) as { deterministicPassed?: boolean } : {};
       const recovery = classifyRecovery({ providerFailed: verification?.verdict === "provider_failed", deterministicPassed: deterministic.deterministicPassed ?? false, outOfScope: requiresScopeReview(parseList(record.task.allowedPaths)), ambiguityScore: contract?.ambiguityScore, failureText: record.task.lastError ?? verification?.summary ?? "" });
       let advisor: unknown = null;
-      try { const secret = await requireReadySecret(user, "gemini"); advisor = await analyzeQualityRecovery(secret, { taskTitle: record.task.title, failureDomain: recovery.domain, deterministicRecommendation: recovery.recommendation, failureText: record.task.lastError ?? verification?.summary, deterministicFacts: { verdict: verification?.verdict ?? null, deterministic, ambiguityScore: contract?.ambiguityScore ?? 0, allowedPaths: parseList(record.task.allowedPaths) } }); }
+      try { const { secret, model } = await resolveGeminiModel(user, record.initiative.geminiModel); advisor = await analyzeQualityRecovery(secret, { taskTitle: record.task.title, failureDomain: recovery.domain, deterministicRecommendation: recovery.recommendation, failureText: record.task.lastError ?? verification?.summary, deterministicFacts: { verdict: verification?.verdict ?? null, deterministic, ambiguityScore: contract?.ambiguityScore ?? 0, allowedPaths: parseList(record.task.allowedPaths) }, geminiModel: model }); }
       catch (error) { advisor = { unavailable: true, message: error instanceof Error ? error.message.slice(0, 300) : "Bounded recovery adviser unavailable" }; }
       const advisorText = (advisor as { failureNarrative?: string }).failureNarrative;
       const recommendation = advisorText ? `${recovery.recommendation}\n\nBounded adviser note: ${advisorText}` : recovery.recommendation;

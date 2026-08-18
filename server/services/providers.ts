@@ -1,5 +1,6 @@
 import axios from "axios";
 import { z } from "zod";
+import { DEFAULT_GEMINI_MODEL, normalizeGeminiModelName } from "./gemini-models";
 
 const JULES_BASE_URL = "https://jules.googleapis.com/v1alpha";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -165,11 +166,26 @@ export async function testCredential(provider: "jules" | "gemini" | "github", se
   }
 }
 
-export async function compileWithGemini(secret: string, input: { prompt: string; repository: string; branch: string }) {
+export async function listGeminiModels(secret: string) {
+  try {
+    const models: string[] = []; let pageToken: string | undefined;
+    do {
+      const response = await axios.get(`${GEMINI_BASE_URL}/models`, { params: { key: secret, pageSize: 1000, ...(pageToken ? { pageToken } : {}) }, timeout: 15000 });
+      for (const model of response.data?.models ?? []) {
+        const methods = model.supportedGenerationMethods ?? model.supported_actions ?? [];
+        if (methods.length === 0 || methods.includes("generateContent")) models.push(normalizeGeminiModelName(model.name ?? model.baseModelId ?? ""));
+      }
+      pageToken = response.data?.nextPageToken;
+    } while (pageToken);
+    return Array.from(new Set(models.filter(Boolean))).sort();
+  } catch (error) { throw providerError(error); }
+}
+
+export async function compileWithGemini(secret: string, input: { prompt: string; repository: string; branch: string; geminiModel?: string }) {
   try {
     const instruction = `You are a senior software delivery planner. Compile the request into an ordered dependency DAG of focused coding tasks. Repository: ${input.repository}; target branch: ${input.branch}. Every task must specify concrete, non-empty repository-relative allowed paths, non-goals, acceptance criteria, and dependencies by task title. Never return an empty allowedPaths array. Avoid implementation steps that access production secrets or perform destructive operations. User request:\n${input.prompt}`;
     const response = await axios.post(
-      `${GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(secret)}`,
+      `${GEMINI_BASE_URL}/models/${input.geminiModel ?? DEFAULT_GEMINI_MODEL}:generateContent?key=${encodeURIComponent(secret)}`,
       {
         contents: [{ role: "user", parts: [{ text: instruction }] }],
         generationConfig: { responseMimeType: "application/json", responseSchema: geminiResponseSchema, temperature: 0.2 },
@@ -184,9 +200,9 @@ export async function compileWithGemini(secret: string, input: { prompt: string;
   }
 }
 
-async function generateGeminiStructured<T>(secret: string, instruction: string, responseSchema: unknown, parse: (value: unknown) => T) {
+async function generateGeminiStructured<T>(secret: string, instruction: string, responseSchema: unknown, parse: (value: unknown) => T, geminiModel = DEFAULT_GEMINI_MODEL) {
   try {
-    const response = await axios.post(`${GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(secret)}`,
+    const response = await axios.post(`${GEMINI_BASE_URL}/models/${geminiModel}:generateContent?key=${encodeURIComponent(secret)}`,
       { contents: [{ role: "user", parts: [{ text: instruction }] }], generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.1, maxOutputTokens: 5000 } },
       { timeout: 45000 });
     const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -195,26 +211,26 @@ async function generateGeminiStructured<T>(secret: string, instruction: string, 
   } catch (error) { throw providerError(error); }
 }
 
-export async function generateQualityContract(secret: string, input: { prompt: string; repository: string; branch: string }) {
+export async function generateQualityContract(secret: string, input: { prompt: string; repository: string; branch: string; geminiModel?: string }) {
   const contract = await generateGeminiStructured(secret,
     `Act as a bounded delivery-contract planner. Create a concise acceptance contract for this coding initiative. This is a planning artifact only: do not claim code was changed, do not assume secrets, do not authorize dispatch, and keep all constraints reviewable by an operator. Repository: ${input.repository}; target branch: ${input.branch}. Initiative request:\n${input.prompt}`,
-    qualityContractResponseSchema, value => qualityContractSchema.parse(value));
+    qualityContractResponseSchema, value => qualityContractSchema.parse(value), input.geminiModel);
   const critic = await generateGeminiStructured(secret,
     `Act as an independent contract critic. Review this proposed delivery contract against the original initiative. Flag ambiguity, missing measurable success signals, scope expansion, and unsafe assumptions. You only advise an operator; you must not approve work or request automatic dispatch. Original initiative:\n${input.prompt}\n\nProposed contract:\n${JSON.stringify(contract)}`,
-    qualityCriticResponseSchema, value => qualityCriticSchema.parse(value));
+    qualityCriticResponseSchema, value => qualityCriticSchema.parse(value), input.geminiModel);
   return { contract, critic };
 }
 
-export async function runAdversarialQualityReview(secret: string, input: { taskTitle: string; taskDescription: string; criteria: Array<{ id: string; text: string; deterministicStatus: string }>; evidence: Array<{ criterionId: string; status: string; label: string; reference?: string | null; detail?: string | null }> }) {
+export async function runAdversarialQualityReview(secret: string, input: { taskTitle: string; taskDescription: string; criteria: Array<{ id: string; text: string; deterministicStatus: string }>; evidence: Array<{ criterionId: string; status: string; label: string; reference?: string | null; detail?: string | null }>; geminiModel?: string }) {
   return generateGeminiStructured(secret,
     `Act as a bounded adversarial verification reviewer. Review only the supplied local evidence for the completed Jules task below. Do not infer unlisted test results, diffs, files, or provider behavior. For every finding, cite only supplied evidence reference strings; an empty reference list is required if the evidence does not support the claim. Your analysis cannot override deterministic failures and never authorizes acceptance or redispatch.\n\nTask: ${input.taskTitle}\n${input.taskDescription}\n\nAcceptance criteria and deterministic status:\n${JSON.stringify(input.criteria)}\n\nEvidence:\n${JSON.stringify(input.evidence)}`,
-    adversarialResponseSchema, value => adversarialReviewSchema.parse(value));
+    adversarialResponseSchema, value => adversarialReviewSchema.parse(value), input.geminiModel);
 }
 
-export async function analyzeQualityRecovery(secret: string, input: { taskTitle: string; failureDomain: string; deterministicRecommendation: string; failureText?: string | null; deterministicFacts: unknown }) {
+export async function analyzeQualityRecovery(secret: string, input: { taskTitle: string; failureDomain: string; deterministicRecommendation: string; failureText?: string | null; deterministicFacts: unknown; geminiModel?: string }) {
   return generateGeminiStructured(secret,
     `Act as a bounded failure-analysis adviser. The deterministic recovery domain and recommendation below are authoritative. Explain only what an operator should inspect, what evidence is still needed, and what question needs a decision. Do not recommend automatic redispatch, scope expansion, credential rotation, or provider-side changes.\n\nTask: ${input.taskTitle}\nDeterministic failure domain: ${input.failureDomain}\nDeterministic recommendation: ${input.deterministicRecommendation}\nObserved failure text: ${input.failureText ?? "none"}\nDeterministic facts: ${JSON.stringify(input.deterministicFacts)}`,
-    recoveryAdvisorResponseSchema, value => recoveryAdvisorSchema.parse(value));
+    recoveryAdvisorResponseSchema, value => recoveryAdvisorSchema.parse(value), input.geminiModel);
 }
 
 export async function validateGitHubBranch(secret: string, repository: string, branch: string) {

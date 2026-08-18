@@ -38,6 +38,14 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("Initiative Quality Gate");
     expect(source).toContain("quality.generateContract.useMutation");
     expect(source).toContain("quality.decideContract.useMutation");
+    expect(source).toContain("Gemini inference model");
+    expect(source).toContain("gemini-3.7-flash");
+    expect(source).toContain("gemini-3.6-flash");
+    expect(source).toContain("gemini-3.5-flash");
+    expect(source).toContain("gemini-3.5-flash-lite");
+    expect(source).toContain("gemini-3.1-flash-lite");
+    expect(source).toContain("gemini-2.5-flash");
+    expect(source).toContain("verified against your Gemini credential");
   });
 
   it("retains task dispatch, polling, evidence, and plan-action controls", async () => {
@@ -58,5 +66,7 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain('type: "reconcile"');
     expect(source).toContain('"set_local_hold"');
     expect(source).toContain("Recent command ledger");
+    expect(source).toContain("Gemini model");
+    expect(source).toContain("promptGeminiModel");
   });
 });

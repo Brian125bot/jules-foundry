@@ -1,0 +1,1 @@
+ALTER TABLE `initiatives` ADD `geminiModel` varchar(80) DEFAULT 'gemini-2.5-flash' NOT NULL;
