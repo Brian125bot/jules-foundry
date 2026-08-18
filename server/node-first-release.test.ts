@@ -14,9 +14,9 @@ describe("Node-first local distribution", () => {
     await expect(access(new URL("../src-tauri", import.meta.url), constants.F_OK)).rejects.toThrow();
   });
 
-  it("keeps CI focused on the Node/browser validation workflow", async () => {
-    const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
-    expect(workflow).not.toMatch(/tauri|rust-toolchain|sidecar|TAURI_/i);
-    expect(workflow).toContain("pnpm release:verify");
+  it("keeps verification user-run without GitHub Actions workflow coupling", async () => {
+    await expect(access(new URL("../.github/workflows/release.yml", import.meta.url), constants.F_OK)).rejects.toThrow();
+    const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    expect(packageJson.scripts["release:verify"]).toContain("pnpm test:coverage");
   });
 });

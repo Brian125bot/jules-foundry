@@ -26,3 +26,6 @@
 - [x] Replace desktop commands with a one-command browser launcher and Node-only release verification.
 - [x] Remove desktop workflow jobs and revise CI for clone-and-run Node validation.
 - [x] Rewrite the quickstart, release documentation, and troubleshooting for browser-based local operation.
+- [x] Verify GitHub workflow automation is isolated from the local runtime and release scripts.
+- [x] Remove GitHub Actions workflow files and workflow-only operating guidance.
+- [x] Revalidate local installation, `pnpm start`, and `pnpm release:verify` without workflows.

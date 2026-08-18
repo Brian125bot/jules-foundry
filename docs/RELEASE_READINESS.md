@@ -27,7 +27,7 @@ The current Node/browser validation gate includes a frozen dependency installati
 
 The supported user journey is intentionally small: clone the repository, run `pnpm install --frozen-lockfile`, and run `pnpm start`. The application compiles locally, opens the browser, and writes all operator data outside the repository. No Rust/Cargo installation, native installer, sidecar executable, code-signing certificate, updater feed, or GitHub Actions secret is required.
 
-Continuous integration validates the same Node/browser workflow on pull requests and `main`. Provider contract tests, if later introduced, must use separate least-privilege credentials and disposable resources; they are not a prerequisite for a user to run the application locally.
+The project deliberately has no hosted workflow automation. Run `pnpm release:verify` locally before sharing or deploying a change. Provider contract tests, if later introduced, must use separate least-privilege credentials and disposable resources; they are not a prerequisite for a user to run the application locally.
 
 ## Local data integrity
 
