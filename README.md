@@ -22,8 +22,8 @@ The server binds to **`127.0.0.1` only**. At launch it opens a one-time bootstra
 
 | Requirement | Purpose |
 |---|---|
-| Node.js 22 or later | Runs the local service and build tooling. |
-| pnpm 10 or later | Installs locked dependencies. |
+| Node.js 22 | Runs the local service and build tooling. |
+| pnpm 10 | Installs locked dependencies. Enable it with `corepack enable` if necessary. |
 | A trusted user account on the machine | Holds the local data directory and OS secure-storage entry. |
 | Gemini, Jules, and GitHub credentials | Entered later in the write-only Credential vault; they are not environment variables. |
 
@@ -36,11 +36,11 @@ By default, Foundry creates a random vault encryption key in the current operati
 export FOUNDRY_VAULT_MODE=passphrase
 export FOUNDRY_VAULT_PASSPHRASE="use-a-long-unique-local-passphrase"
 
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
+pnpm start
 ```
 
-Foundry initializes its SQLite schema automatically, seeds the single `Local operator` identity, starts its monitor supervisor, and opens the one-time local browser session. If browser launching is unavailable on a headless machine, use the local launcher output rather than navigating to the port directly. Set `FOUNDRY_OPEN_BROWSER=false` only when a trusted wrapper handles the launch capability. If startup reports an existing Foundry instance, use that instance instead of deleting its lock file.
+`pnpm start` builds the browser and local server, initializes its SQLite schema automatically, seeds the single `Local operator` identity, starts its monitor supervisor, and opens a one-time local browser session. There is no desktop installer, Rust toolchain, native sidecar, or cloud service required. For iterative development, use `pnpm dev`. If browser launching is unavailable on a headless machine, set `FOUNDRY_OPEN_BROWSER=false` and use the one-time launch URL printed by a trusted local wrapper. If startup reports an existing Foundry instance, use that instance instead of deleting its lock file.
 
 After the dashboard opens, configure and test Jules, Gemini, and GitHub credentials in **Credential vault**. Values are encrypted before persistence, never returned to the browser after submission, omitted from list procedures and mission events, and shown only as masked suffixes.
 
@@ -82,8 +82,8 @@ pnpm build
 # Run the complete local-user release gate, including a lockfile-derived SBOM
 pnpm release:verify
 
-# Prepare the signed desktop bundle on a release machine with Rust/Cargo installed
-pnpm desktop:prepare
+# Start the browser-based local tool after installation
+pnpm start
 ```
 
 The current suite covers task graph validation, credential write-only behavior, dispatch and poll idempotency, Quality Mesh verdicts, session controls, initiative deletion safeguards, Gemini model selection, local session rejection and bootstrap exchange, server-side session revocation, local SQLite initialization, integrity guards, backup inventory, staged recovery, storage-root containment, versioned vault encryption, single-instance locking, and restart-safe monitor checkpoint selection. The release gate also enforces the pinned pnpm policy, production dependency audit, targeted coverage thresholds, browser-chunk budget, local-first output scan, and a lockfile-derived SBOM.
@@ -92,4 +92,4 @@ The current suite covers task graph validation, credential write-only behavior, 
 
 The local runtime is designed for a **single trusted machine**, not shared-host or multi-tenant operation. Keep the data directory owner-only, do not expose the loopback port with a tunnel or reverse proxy, and do not run the local data directory from a network filesystem. Gemini, Jules, and GitHub calls remain network operations and can be disabled by removing or deleting their local credential profiles.
 
-For detailed operational procedures and migration notes, see [release-readiness controls](docs/RELEASE_READINESS.md), [Local-first operations](docs/local_first_operations.md), [desktop release guidance](docs/desktop_release_guide.md), the [local runtime dependency audit](docs/local_runtime_dependency_audit.md), the [local-install readiness assessment](docs/local_install_readiness.md), and the [trusted-machine migration plan](docs/trusted_machine_local_first_migration_plan.md).
+For detailed operational procedures and migration notes, see the [local run guide](docs/LOCAL_RUN_GUIDE.md), [release-readiness controls](docs/RELEASE_READINESS.md), [Local-first operations](docs/local_first_operations.md), and the [local runtime dependency audit](docs/local_runtime_dependency_audit.md).

@@ -1,7 +1,7 @@
 # Project TODO
 
-- [ ] Inventory the canonical source tree and preserve a validated implementation baseline.
-- [ ] Record the current implementation baseline with release-relevant verification before the first checkpoint.
+- [x] Historical limitation documented: an untouched pre-remediation baseline was not preserved and cannot be reconstructed retroactively.
+- [x] Historical limitation documented: pre-change release verification was unavailable; post-change verification is the authoritative evidence.
 - [x] Add Express 5 route-registration regression coverage after updating the server dependency.
 - [x] Repair deterministic unsigned and signed Tauri configuration generation from a clean checkout.
 - [x] Enforce the pinned pnpm policy and validate effective patch, override, and native-build configuration.
@@ -14,7 +14,15 @@
 - [x] Establish and enforce a baseline for targeted security-critical code coverage.
 - [x] Validate release-oriented type checks, tests, production build, sidecar smoke, frozen install, dependency audit, and new verification gates.
 - [x] Document completed remediation work and remaining external signing, platform-matrix, and live-provider release prerequisites.
-- [ ] Run protected-CI signed desktop builds, code-signing/notarization validation, installer smoke tests, updater tamper rejection, and live-provider contract tests using organization-owned credentials and disposable resources.
+- [x] Superseded by the approved Node-first scope: signed desktop builds, notarization, installer, updater, and sidecar validation are no longer part of the product.
 - [x] Synchronize the canonical project with the latest GitHub state and reconcile documentation changes.
 - [x] Update production-readiness documentation with current implementation status and GitHub publication details.
-- [x] Save and push the reconciled project checkpoint to GitHub.
+- [x] Attempt GitHub publication; workflow updates were blocked by the connected GitHub App's missing Workflows permission and the user was notified.
+- [x] Inventory all Tauri-specific code, scripts, dependencies, CI steps, and documentation references.
+- [x] Make the Node/Express browser runtime the documented one-command local path.
+- [x] Remove Tauri packaging completely from the supported local and release workflow.
+- [x] Revalidate the simplified local release gate, local launch, and operational documentation.
+- [x] Remove `src-tauri`, Tauri packages, Rust tooling, updater configuration, and sidecar packaging scripts from the repository.
+- [x] Replace desktop commands with a one-command browser launcher and Node-only release verification.
+- [x] Remove desktop workflow jobs and revise CI for clone-and-run Node validation.
+- [x] Rewrite the quickstart, release documentation, and troubleshooting for browser-based local operation.

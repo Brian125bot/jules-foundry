@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
 const outputDirectory = join(process.cwd(), "dist", "public");
-const forbiddenTemplateToken = /%VITE_[A-Z0-9_]+%|__TAURI_UPDATE_[A-Z_]+__/;
+const forbiddenTemplateToken = /%VITE_[A-Z0-9_]+%/;
 const forbiddenHtmlOrCssOrigin = /(?:src|href)\s*=\s*["']https?:\/\/|url\(\s*["']?https?:\/\//i;
 const forbiddenExecutableOrigin = /(?:fetch|axios\.(?:get|post|put|patch|delete))\s*\(\s*["']https?:\/\//i;
 const secretIndicators = [

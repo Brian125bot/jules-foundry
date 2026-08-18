@@ -7,7 +7,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveLocalStatic } from "./static";
 import { checkpointLocalDb, closeLocalDb, getLocalDb } from "../local-db";
-import { acquireLocalInstanceLock, configureLocalListener, establishLocalSession, openLocalBrowser, releaseLocalInstanceLock, runLocalPreflight } from "../local-runtime";
+import { acquireLocalInstanceLock, configureLocalListener, establishLocalSession, localLaunchPath, openLocalBrowser, releaseLocalInstanceLock, runLocalPreflight } from "../local-runtime";
 import { registerLocalStorageRoutes } from "../local-storage";
 import { startLocalMonitor, stopLocalMonitor } from "../services/local-monitor";
 import { migrateLegacyVaultCiphertexts } from "../services/vault-migration";
@@ -57,8 +57,12 @@ async function startServer() {
   const port = await findAvailablePort(Number.parseInt(process.env.FOUNDRY_PORT || "31415", 10));
   configureLocalListener(port);
   server.listen(port, "127.0.0.1", () => {
-    console.log(`Jules Foundry local runtime is ready on 127.0.0.1:${port}. A one-time local browser session is opening.`);
-    openLocalBrowser(port);
+    const launchUrl = `http://127.0.0.1:${port}${localLaunchPath()}`;
+    if (process.env.FOUNDRY_OPEN_BROWSER === "false") console.log(`Jules Foundry local runtime is ready. Open this one-time local session URL in a trusted browser: ${launchUrl}`);
+    else {
+      console.log(`Jules Foundry local runtime is ready on 127.0.0.1:${port}. A one-time local browser session is opening.`);
+      openLocalBrowser(port);
+    }
     startLocalMonitor();
   });
   const shutdown = createLocalShutdownHandler({
