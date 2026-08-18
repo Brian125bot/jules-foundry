@@ -30,4 +30,20 @@ describe("granular session-control policy", () => {
     expect(snapshot).toMatchObject({ julesState: "AWAITING_PLAN_APPROVAL", localHold: false, sessionName: "sessions/99" });
     expect(snapshot.planDigest).not.toContain("plan contents");
   });
+
+  it("keeps destructive provider deletion confirmation-gated while terminal sessions remain exportable", () => {
+    const terminal = controlAvailability({ julesState: "FAILED", localHold: 0, hasSession: true });
+    expect(terminal.canDelete).toBe(true);
+    expect(terminal.canRefresh).toBe(false);
+    expect(terminal.canExportDossier).toBe(true);
+    const absent = controlAvailability({ julesState: null, localHold: 0, hasSession: false });
+    expect(absent.canDelete).toBe(false);
+    expect(absent.canReconcile).toBe(false);
+  });
+
+  it("caps retry backoff while preserving a non-terminal recommendation", () => {
+    expect(nextPollDelaySeconds("IN_PROGRESS", 99)).toBe(480);
+    expect(nextPollDelaySeconds("QUEUED", 99)).toBe(900);
+    expect(nextPollDelaySeconds("FAILED", 99)).toBeNull();
+  });
 });

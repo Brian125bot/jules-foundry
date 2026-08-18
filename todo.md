@@ -82,7 +82,8 @@
 - [x] Complete adaptive checkpoint updates, provider-activity deduplication, and lease enforcement in the live reconciliation path.
 - [x] Finish granular command dialogs and regression coverage for safe, governance, and destructive session controls.
 - [x] Complete the resumed final granular-control hardening, validation, and checkpoint pass.
-- [ ] Define and document a production test matrix covering domain, persistence, provider, router, UI, and build layers.
-- [ ] Add deep regression coverage for orchestration state, quality gates, session-control monitoring, and destructive safeguards.
-- [ ] Add provider-boundary and desktop control-plane coverage for critical operational workflows.
-- [ ] Run and record complete static, test, and production-build verification for the expanded suite.
+- [x] Define and document a production test matrix covering domain, persistence, provider, router, UI, and build layers.
+- [x] Add deep regression coverage for orchestration state, quality gates, session-control monitoring, and destructive safeguards.
+- [x] Add router-level monitor-checkpoint regression coverage for success, failure backoff, and provider-activity deduplication.
+- [x] Add provider-boundary and desktop control-plane coverage for critical operational workflows.
+- [x] Run and record complete static, test, and production-build verification for the expanded suite.
