@@ -60,3 +60,4 @@
 - [x] Refine Command center, Fleet, Initiatives, Credential vault, and mission-detail layouts for desktop-first scanning and operations.
 - [x] Validate desktop layouts, interaction affordances, and regression coverage without removing existing functionality.
 - [x] Add and run desktop control-smoke coverage for retained workspace actions, then record the interactive-layout validation findings.
+- [x] Compose an LLM-assisted automation plan for Jules task planning, prompt construction, completion/failure analysis, and end-to-end correctness verification.
