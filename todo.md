@@ -71,3 +71,5 @@
 - [x] Surface task-quality proof maps and initiative quality-gate summaries in the existing desktop control planes.
 - [x] Exercise the Quality Mesh procedures and desktop control surfaces with regression and visual verification.
 - [x] Add explicit Quality Mesh query-failure states and an evidence-requirement regression for terminal verification.
+- [x] Add code-level regression coverage for Quality Mesh contract, prompt, verification, recovery, and closeout orchestration rules.
+- [x] Verify the Quality Mesh test additions with TypeScript and the complete Vitest suite.

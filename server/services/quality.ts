@@ -1,6 +1,17 @@
 export type CriterionStatus = "proven" | "partial" | "unproven" | "contradicted";
 export type QualityVerdict = "accepted" | "conditionally_accepted" | "failed_verification" | "needs_human_review" | "provider_failed";
 export type RecoveryDomain = "contract" | "prompt" | "scope" | "environment" | "implementation" | "provider_uncertainty";
+export type QualityContractDecision = "draft" | "approved" | "revise" | "human_review";
+
+/** A contract gates a dispatch only after a Quality Mesh contract exists; operator dispatch remains separate. */
+export function canDispatchWithQualityContract(decision?: QualityContractDecision | null) {
+  return !decision || decision === "approved";
+}
+
+/** Quality verification is intentionally deferred until Jules is terminal or the task is explicitly in local review. */
+export function isQualityVerificationEligible(input: { julesState?: string | null; taskState?: string | null }) {
+  return input.taskState === "review_ready" || input.julesState === "COMPLETED" || input.julesState === "FAILED";
+}
 
 export function buildDeterministicProofMap(input: { criteria: Array<{ id: string; text: string }>; evidence: Array<{ criterionId: string; status: CriterionStatus }> }) {
   return input.criteria.map(criterion => {

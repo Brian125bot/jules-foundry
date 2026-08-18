@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { digestPayload } from "./services/vault";
-import { buildDeterministicProofMap, buildProofCarryingPrompt, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict } from "./services/quality";
+import { buildDeterministicProofMap, buildProofCarryingPrompt, canDispatchWithQualityContract, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict, isQualityVerificationEligible } from "./services/quality";
 
 describe("Quality Mesh core", () => {
   it("does not accept contradictory or unproven blocking criteria", () => {
@@ -34,5 +34,18 @@ describe("Quality Mesh core", () => {
   it("keeps implementation and ambiguity recovery recommendations non-automatic", () => {
     expect(classifyRecovery({ deterministicPassed: false })).toMatchObject({ domain: "implementation", autoRetryEligible: 0 });
     expect(classifyRecovery({ deterministicPassed: true, ambiguityScore: 75 })).toMatchObject({ domain: "contract", autoRetryEligible: 0 });
+  });
+  it("requires an operator-approved Quality Mesh contract before a contract-gated dispatch", () => {
+    expect(canDispatchWithQualityContract(null)).toBe(true);
+    expect(canDispatchWithQualityContract("approved")).toBe(true);
+    expect(canDispatchWithQualityContract("draft")).toBe(false);
+    expect(canDispatchWithQualityContract("revise")).toBe(false);
+    expect(canDispatchWithQualityContract("human_review")).toBe(false);
+  });
+  it("allows Quality Mesh verification only for a terminal Jules session or explicit review state", () => {
+    expect(isQualityVerificationEligible({ julesState: "COMPLETED", taskState: "review_ready" })).toBe(true);
+    expect(isQualityVerificationEligible({ julesState: "FAILED", taskState: "blocked" })).toBe(true);
+    expect(isQualityVerificationEligible({ julesState: "IN_PROGRESS", taskState: "executing" })).toBe(false);
+    expect(isQualityVerificationEligible({ julesState: null, taskState: "review_ready" })).toBe(true);
   });
 });

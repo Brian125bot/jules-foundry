@@ -6,7 +6,7 @@ import { credentialProfiles, initiatives, qualityContracts, qualityPrompts, qual
 import { getCredentialById, getCredentialProfiles, getCredentialSecret, getDb, getInitiativeForUser, getTaskForUser, getTaskTimeline, requireDb } from "../db";
 import { digestPayload, decryptSecret, encryptSecret, maskSecret } from "../services/vault";
 import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, generateQualityContract, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
-import { buildDeterministicProofMap, buildProofCarryingPrompt, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict } from "../services/quality";
+import { buildDeterministicProofMap, buildProofCarryingPrompt, canDispatchWithQualityContract, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict, isQualityVerificationEligible } from "../services/quality";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
@@ -334,7 +334,7 @@ export const foundryRouter = router({
         const source = await findJulesSource(julesSecret, record.initiative.repository, record.initiative.branch);
         if (!source.ok) throw new Error(source.message);
         const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
-        if (contract && contract.decision !== "approved") throw new Error(`Quality contract v${contract.version} requires an operator decision before dispatch.`);
+        if (!canDispatchWithQualityContract(contract?.decision)) throw new Error(`Quality contract v${contract!.version} requires an operator decision before dispatch.`);
         const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
         const draftPacket = buildProofCarryingPrompt({ title: record.task.title, description: record.task.description, allowedPaths, nonGoals: parseList(record.task.nonGoals), acceptanceCriteria: criteria });
         const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", allowedPaths, nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
@@ -426,7 +426,7 @@ export const foundryRouter = router({
     runVerification: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb()); const user = userId(ctx); const record = await getTaskForUser(user, input.taskId);
       if (!record) throw new TRPCError({ code: "NOT_FOUND" });
-      if (!terminalJulesStates.has(record.task.julesState ?? "") && record.task.state !== "review_ready") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Quality verification is available only after a terminal Jules session." });
+      if (!isQualityVerificationEligible({ julesState: record.task.julesState, taskState: record.task.state })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Quality verification is available only after a terminal Jules session." });
       const timeline = await getTaskTimeline(record.task.id); const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
       const proofMap = buildDeterministicProofMap({ criteria, evidence: timeline.evidence });
       const deterministicPassed = !proofMap.some(item => item.status === "contradicted");
