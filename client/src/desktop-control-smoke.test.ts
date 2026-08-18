@@ -51,5 +51,12 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("quality.compilePrompt.useMutation");
     expect(source).toContain("quality.runVerification.useMutation");
     expect(source).toContain("quality.runRecovery.useMutation");
+    expect(source).toContain("foundry.session.deck.useQuery");
+    expect(source).toContain("foundry.session.command.useMutation");
+    expect(source).toContain("Session Command Deck");
+    expect(source).toContain("Foundry-only hold");
+    expect(source).toContain('type: "reconcile"');
+    expect(source).toContain('"set_local_hold"');
+    expect(source).toContain("Recent command ledger");
   });
 });

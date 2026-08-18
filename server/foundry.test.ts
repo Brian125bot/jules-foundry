@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret, maskSecret } from "./services/vault";
-import { buildDossierMarkdown, deriveHealth, dispatchAttemptKey, ESTIMATED_CENTS_PER_PROVIDER_CALL, pollAttemptKey, resolveCredentialWriteTarget, validateCompiledDag } from "./routers/foundry";
+import { buildDossierMarkdown, deriveHealth, dispatchAttemptKey, ESTIMATED_CENTS_PER_PROVIDER_CALL, pollAttemptKey, resolveCredentialWriteTarget, summarizeInitiativeDeletion, validateCompiledDag } from "./routers/foundry";
 
 describe("credential vault primitives", () => {
   it("round-trips a secret without using the masked value as storage", () => {
@@ -24,6 +24,21 @@ describe("task graph validation", () => {
     expect(() => validateCompiledDag([{ title: "Map repository", dependencies: [] }, { title: "Implement change", dependencies: ["Map repository"] }])).not.toThrow();
     expect(() => validateCompiledDag([{ title: "A", dependencies: ["Missing"] }])).toThrow(/does not exist/);
     expect(() => validateCompiledDag([{ title: "A", dependencies: ["B"] }, { title: "B", dependencies: ["A"] }])).toThrow(/cycle/);
+    expect(() => validateCompiledDag([{ title: "Scope", dependencies: [] }, { title: " scope ", dependencies: [] }])).toThrow(/duplicate/i);
+    expect(() => validateCompiledDag([{ title: "A", dependencies: [" A "] }])).toThrow(/cannot depend on itself/i);
+  });
+});
+
+describe("initiative deletion boundary", () => {
+  it("blocks deletion only when a task has both a remote session and an active orchestration state", () => {
+    const summary = summarizeInitiativeDeletion([
+      { id: 1, title: "Finished remote work", state: "review_ready", julesSessionName: "sessions/finished" },
+      { id: 2, title: "Draft", state: "ready", julesSessionName: null },
+    ]);
+    expect(summary).toMatchObject({ taskCount: 2, canDelete: true, activeSessions: [] });
+    const blocked = summarizeInitiativeDeletion([{ id: 3, title: "Executing", state: "executing", julesSessionName: "sessions/live" }]);
+    expect(blocked.canDelete).toBe(false);
+    expect(blocked.activeSessions.map(task => task.id)).toEqual([3]);
   });
 });
 
@@ -41,6 +56,7 @@ describe("monitoring health and evidence dossier", () => {
     expect(deriveHealth("AWAITING_PLAN_APPROVAL", new Date())).toBe("attention");
     expect(deriveHealth("IN_PROGRESS", new Date(Date.now() - 25 * 60 * 1000))).toBe("stale");
     expect(deriveHealth("IN_PROGRESS", new Date())).toBe("healthy");
+    expect(deriveHealth(undefined, new Date(Date.now() - 21 * 60 * 1000))).toBe("stale");
   });
 
   it("creates an exportable dossier without any secret values", () => {
@@ -54,6 +70,8 @@ describe("monitoring health and evidence dossier", () => {
     expect(content).toContain("# Jules Foundry Evidence Dossier");
     expect(content).toContain("**proven** — CI suite (run-22)");
     expect(content).not.toContain("secret-token");
+    const defaults = buildDossierMarkdown({ task: { title: "Unlinked", taskKey: "task-456" }, initiative: { repository: "acme/app", branch: "main" }, criteria: [{ id: "AC-2", text: "No evidence defaults safely" }], evidence: [], events: [] });
+    expect(defaults).toContain("**unproven** — No linked evidence yet.");
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchJulesSource, missingJulesSourceMessage, normalizeCompiledInitiative, requiresScopeReview, SCOPE_REVIEW_PATH } from "./services/providers";
+import { compiledInitiativeSchema, matchJulesSource, missingJulesSourceMessage, normalizeCompiledInitiative, requiresScopeReview, SCOPE_REVIEW_PATH } from "./services/providers";
 
 describe("Gemini task-packet normalization", () => {
   it("quarantines an empty allowed-paths array instead of failing or broadening task scope", () => {
@@ -34,6 +34,16 @@ describe("Gemini task-packet normalization", () => {
     expect(allowedPaths).toEqual([SCOPE_REVIEW_PATH]);
     expect(requiresScopeReview(allowedPaths)).toBe(true);
     expect(requiresScopeReview(["server/routes.ts"])).toBe(false);
+  });
+
+  it("rejects packet shapes that exceed bounded task and acceptance-criterion limits", () => {
+    const task = {
+      title: "Bounded test task", description: "A sufficiently detailed bounded task description.", riskTier: "green" as const,
+      allowedPaths: ["README.md"], nonGoals: ["Do not change unrelated files."], acceptanceCriteria: [{ id: "AC-1", text: "The bounded task completes safely." }], dependencies: [],
+    };
+    expect(() => compiledInitiativeSchema.parse({ tasks: Array.from({ length: 13 }, () => task) })).toThrow();
+    expect(() => compiledInitiativeSchema.parse({ tasks: [{ ...task, acceptanceCriteria: [] }] })).toThrow();
+    expect(() => compiledInitiativeSchema.parse({ tasks: [{ ...task, allowedPaths: [""] }] })).toThrow();
   });
 });
 
