@@ -15,6 +15,6 @@
 - [x] Validate release-oriented type checks, tests, production build, sidecar smoke, frozen install, dependency audit, and new verification gates.
 - [x] Document completed remediation work and remaining external signing, platform-matrix, and live-provider release prerequisites.
 - [ ] Run protected-CI signed desktop builds, code-signing/notarization validation, installer smoke tests, updater tamper rejection, and live-provider contract tests using organization-owned credentials and disposable resources.
-- [ ] Synchronize the canonical project with the latest GitHub state and reconcile documentation changes.
-- [ ] Update production-readiness documentation with current implementation status and GitHub publication details.
+- [x] Synchronize the canonical project with the latest GitHub state and reconcile documentation changes.
+- [x] Update production-readiness documentation with current implementation status and GitHub publication details.
 - [ ] Save and push the reconciled project checkpoint to GitHub.

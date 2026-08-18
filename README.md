@@ -73,8 +73,8 @@ pnpm db:generate
 # Type-check the application
 pnpm check
 
-# Run all governance and local-first tests
-FOUNDRY_VAULT_MODE=passphrase FOUNDRY_VAULT_PASSPHRASE="test-only-value" pnpm test
+# Run all governance and local-first tests with targeted coverage thresholds
+FOUNDRY_VAULT_MODE=passphrase FOUNDRY_VAULT_PASSPHRASE="test-only-value" pnpm test:coverage
 
 # Build the production local service and browser bundle
 pnpm build
@@ -86,10 +86,10 @@ pnpm release:verify
 pnpm desktop:prepare
 ```
 
-The current suite covers task graph validation, credential write-only behavior, dispatch and poll idempotency, Quality Mesh verdicts, session controls, initiative deletion safeguards, Gemini model selection, local session rejection and bootstrap exchange, local SQLite initialization, backup inventory, staged recovery, storage-root containment, versioned vault encryption, single-instance locking, and restart-safe monitor checkpoint selection. The release gate also enforces a browser-chunk budget and writes a lockfile-derived SBOM.
+The current suite covers task graph validation, credential write-only behavior, dispatch and poll idempotency, Quality Mesh verdicts, session controls, initiative deletion safeguards, Gemini model selection, local session rejection and bootstrap exchange, server-side session revocation, local SQLite initialization, integrity guards, backup inventory, staged recovery, storage-root containment, versioned vault encryption, single-instance locking, and restart-safe monitor checkpoint selection. The release gate also enforces the pinned pnpm policy, production dependency audit, targeted coverage thresholds, browser-chunk budget, local-first output scan, and a lockfile-derived SBOM.
 
 ## Security boundary
 
 The local runtime is designed for a **single trusted machine**, not shared-host or multi-tenant operation. Keep the data directory owner-only, do not expose the loopback port with a tunnel or reverse proxy, and do not run the local data directory from a network filesystem. Gemini, Jules, and GitHub calls remain network operations and can be disabled by removing or deleting their local credential profiles.
 
-For detailed operational procedures and migration notes, see [Local-first operations](docs/local_first_operations.md), [desktop release guidance](docs/desktop_release_guide.md), the [local runtime dependency audit](docs/local_runtime_dependency_audit.md), the [local-install readiness assessment](docs/local_install_readiness.md), and the [trusted-machine migration plan](docs/trusted_machine_local_first_migration_plan.md).
+For detailed operational procedures and migration notes, see [release-readiness controls](docs/RELEASE_READINESS.md), [Local-first operations](docs/local_first_operations.md), [desktop release guidance](docs/desktop_release_guide.md), the [local runtime dependency audit](docs/local_runtime_dependency_audit.md), the [local-install readiness assessment](docs/local_install_readiness.md), and the [trusted-machine migration plan](docs/trusted_machine_local_first_migration_plan.md).

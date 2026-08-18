@@ -18,6 +18,12 @@ Run the following commands from a clean checkout using the pinned pnpm version d
 
 `pnpm release:verify` runs the complete local release gate above. It is intentionally an **unsigned artifact** validation gate. It does not replace the protected native signing workflow.
 
+## Current implementation status
+
+The source-level production-readiness remediation was synchronized to the GitHub-connected canonical branch in checkpoint `9332004d` on 2026-08-18. The validated unsigned gate includes a frozen dependency installation, pnpm policy verification, production dependency audit, TypeScript type check, 68 automated tests, targeted security-critical coverage thresholds, browser bundle budget validation, local-first output scanning, SBOM generation, deterministic unsigned Tauri configuration, prepared-sidecar smoke testing, and an authenticated local-runtime render check.
+
+> A pristine pre-remediation baseline was not retained before the remediation edits began. The current checkpoint is the authoritative post-remediation baseline; its release evidence is reproducible through `pnpm release:verify`.
+
 ## Desktop configuration modes
 
 `pnpm desktop:config:unsigned` creates an ignored Tauri configuration with updater artifacts disabled. It requires no release secrets and is the only configuration expected for local developer and clean-checkout artifact verification.
@@ -27,6 +33,8 @@ Run the following commands from a clean checkout using the pinned pnpm version d
 ## External release prerequisites
 
 The repository now verifies the source, local runtime, sidecar, dependency policy, and browser output. General availability still requires protected CI to complete operating-system-specific Tauri builds, installer smoke tests, code signing or notarization as appropriate, update-feed tamper rejection, and controlled live-provider contract runs using disposable resources and least-privilege credentials. These operations require organization-owned certificates, updater keys, provider credentials, and platform runners and cannot be validated from an ordinary source checkout.
+
+The protected release environment must provide `TAURI_UPDATE_PUBLIC_KEY`, `TAURI_UPDATE_ENDPOINT`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` through GitHub Actions secrets. Live provider checks must use separate least-privilege Gemini, Jules, and GitHub credentials and disposable test resources; do not use a developer workstation vault or a production repository for this validation.
 
 ## Local data integrity
 
