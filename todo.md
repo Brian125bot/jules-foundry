@@ -50,7 +50,7 @@
 - [x] Add safe initiative deletion that prevents removal while a Jules session is active and removes associated Foundry records only after confirmation.
 - [x] Build a clear destructive-action dialog with initiative impact details and a typed confirmation control.
 - [x] Add regression coverage and responsive visual validation for initiative deletion controls.
-- [ ] Open and visually verify the desktop and mobile deletion dialogs, including typed confirmation and active-session lock states.
+- [x] Open and visually verify the desktop and mobile deletion dialogs, including typed confirmation and active-session lock states.
 - [x] Plan granular per-dispatch session control, tracking, safety, testing, and rollout capabilities for Jules Foundry.
 - [x] Fix control-plane containers that overflow horizontally or extend beyond the right viewport edge.
 - [x] Verify desktop and mobile containment across command center, Fleet, Initiatives, Credentials, and task detail views.
@@ -124,7 +124,7 @@
 - [x] Add end-to-end local lifecycle, recovery, security, bundle-budget, and clean-install regression coverage.
 - [x] Reduce the initial browser bundle through route-level code splitting and establish a local-user build-budget check.
 - [x] Update local-user installation, security, release, and support documentation for the implemented production features.
-- [ ] Run complete production release gates and publish the verified local-user production-ready implementation.
+- [x] Run complete production release gates and publish the verified local-user production-ready implementation.
 - [x] Resolve packaged libSQL and keyring native-module loading so the desktop sidecar starts from bundled resources without development dependencies.
 - [x] Run and record a packaged-sidecar local startup smoke test with only its shipped resources available.
 - [x] Prove that the loopback bootstrap session loads seeded-operator API data, not only the static HTML shell.

@@ -16,6 +16,7 @@
     "desktop:configure-updater": "node scripts/configure-tauri-updater.mjs",
     "desktop:prepare": "pnpm build && node scripts/prepare-sidecar.mjs",
     "desktop:smoke": "node scripts/smoke-packaged-sidecar.mjs",
+    "desktop:delete-dialog": "node scripts/verify-deletion-dialogs.mjs",
     "desktop:build": "pnpm desktop:check && pnpm desktop:prepare && tauri build",
     "desktop:build:signed": "pnpm desktop:check && pnpm desktop:configure-updater && pnpm desktop:prepare && tauri build",
     "release:sbom": "node scripts/generate-sbom.mjs",
