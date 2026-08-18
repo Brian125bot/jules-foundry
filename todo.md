@@ -56,3 +56,7 @@
 - [x] Verify desktop and mobile containment across command center, Fleet, Initiatives, Credentials, and task detail views.
 - [x] Verify an existing task-detail mission on mobile and desktop, including controls, ledgers, and evidence sections, for remaining horizontal overflow.
 - [x] Record explicit desktop and mobile containment findings for command center, Fleet, Initiatives, Credentials, and a real mission-detail view.
+- [x] Optimize the shared workstation shell for desktop information density while retaining all navigation and control paths.
+- [x] Refine Command center, Fleet, Initiatives, Credential vault, and mission-detail layouts for desktop-first scanning and operations.
+- [x] Validate desktop layouts, interaction affordances, and regression coverage without removing existing functionality.
+- [x] Add and run desktop control-smoke coverage for retained workspace actions, then record the interactive-layout validation findings.

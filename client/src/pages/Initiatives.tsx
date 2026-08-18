@@ -28,8 +28,8 @@ type InitiativeTask = {
 function InitiativeGraph({ tasks, onOpenTask }: { tasks: InitiativeTask[]; onOpenTask: (taskId: number) => void }) {
   const ordered = [...tasks].sort((a, b) => a.dispatchOrder - b.dispatchOrder);
   return (
-    <div className="grid min-w-0 gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <div className="grid min-w-0 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+    <div className="grid min-w-0 gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_300px] lg:p-6">
+      <div className="grid min-w-0 gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
         {ordered.map(task => (
           <button
             key={task.id}
@@ -109,7 +109,7 @@ export default function Initiatives() {
 
   return <DashboardLayout>
     <ConsoleHeader eyebrow="Planning / compiler workspace" title="Initiatives" description="Turn a natural-language request into bounded coding work. Gemini emits a typed graph; Foundry rejects unresolved dependencies and cycles before persistence." action={<Button onClick={() => setComposerOpen(true)} className="bg-slate-950 text-white hover:bg-slate-800"><Plus className="mr-2 h-4 w-4" />New initiative</Button>} />
-    <div className="mx-auto min-w-0 max-w-[1600px] space-y-7 p-5 sm:p-8 lg:p-10">
+    <div className="mx-auto min-w-0 max-w-[1680px] space-y-7 p-5 sm:p-8 lg:p-10 2xl:p-12">
       {initiatives.isLoading ? <div className="h-72 animate-pulse rounded-2xl bg-slate-200/70" /> : (initiatives.data ?? []).length === 0 ? <EmptyState title="Start with a decision, not a raw agent prompt" description="Create an initiative to capture a repository context, branch, budget ceiling, and the natural-language request you want Foundry to decompose." action={<Button onClick={() => setComposerOpen(true)}><Sparkles className="mr-2 h-4 w-4" />Create first initiative</Button>} /> : (initiatives.data ?? []).map(initiative => <section key={initiative.id} className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_35px_-25px_rgba(15,23,42,0.3)]">
         <div className="flex min-w-0 flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-lg font-semibold text-slate-950">{initiative.title}</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">{initiative.status}</span></div><p className="mt-2 max-w-3xl break-words text-sm leading-6 text-slate-500">{initiative.prompt}</p><div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500"><span className="inline-flex min-w-0 items-center gap-1.5"><GitBranch className="h-3.5 w-3.5 shrink-0" />{initiative.repository}</span><span>{initiative.branch}</span><span>Budget ceiling ${(initiative.budgetCents / 100).toFixed(2)}</span></div></div>

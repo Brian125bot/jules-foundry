@@ -14,12 +14,12 @@ export function StatusPill({ value, kind = "health" }: { value: string; kind?: "
 }
 
 export function ConsoleHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
-  return <header className="max-w-full overflow-hidden border-b border-slate-200 bg-white px-5 py-6 sm:px-8 lg:px-10"><div className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-col items-start justify-between gap-4 sm:flex-row sm:gap-5"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-700">{eyebrow}</p><h1 className="mt-2 break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</p></div>{action && <div className="max-w-full shrink-0">{action}</div>}</div></header>;
+  return <header className="max-w-full overflow-hidden border-b border-slate-200 bg-white px-5 py-6 sm:px-8 lg:px-10 2xl:px-12"><div className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col items-start justify-between gap-4 sm:flex-row sm:gap-5"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-700">{eyebrow}</p><h1 className="mt-2 break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{title}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{description}</p></div>{action && <div className="max-w-full shrink-0">{action}</div>}</div></header>;
 }
 
 export function MetricCard({ label, value, detail, tone = "cyan" }: { label: string; value: string | number; detail: string; tone?: "cyan" | "amber" | "rose" | "slate" }) {
   const colors = { cyan: "border-cyan-100 bg-cyan-50/70", amber: "border-amber-100 bg-amber-50/70", rose: "border-rose-100 bg-rose-50/70", slate: "border-slate-200 bg-white" };
-  return <div className={cn("rounded-2xl border p-4 shadow-[0_8px_25px_-18px_rgba(15,23,42,0.35)]", colors[tone])}><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">{label}</p><p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></div>;
+  return <div className={cn("rounded-2xl border p-4 shadow-[0_8px_25px_-18px_rgba(15,23,42,0.35)] lg:p-5", colors[tone])}><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">{label}</p><p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></div>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
