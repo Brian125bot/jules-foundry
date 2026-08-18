@@ -44,6 +44,10 @@ pnpm start
 
 After the dashboard opens, configure and test Jules, Gemini, and GitHub credentials in **Credential vault**. Values are encrypted before persistence, never returned to the browser after submission, omitted from list procedures and mission events, and shown only as masked suffixes.
 
+### Direct-user download
+
+Contributors should use the clone workflow above. Maintainers can instead create a prebuilt, production-only local-user bundle with `pnpm release:verify && pnpm local:bundle`. A direct user downloads the matching archive, extracts it, installs Node.js 22, and runs `node start-local.mjs`. This bypasses `pnpm`, Vite, TypeScript, tests, and frontend compilation; see the [local run guide](docs/LOCAL_RUN_GUIDE.md) for details.
+
 ## Local data and backups
 
 Foundry writes data outside the repository, using the operating system’s application-data convention:

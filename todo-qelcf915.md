@@ -32,3 +32,7 @@
 - [x] Audit all remaining documentation for outdated desktop, workflow, or hosted-operation guidance.
 - [x] Update documentation for the final clone-and-run Node local server workflow and credential-vault use.
 - [x] Verify the documented local commands and publish the reconciled project state to GitHub; local and remote `main` now match.
+- [x] Define the prebuilt local-user bundle contract and identify files required at runtime.
+- [x] Add a production-only bundle assembly command and a direct-user launch command that does not build frontend sources.
+- [x] Document contributor versus direct-user installation paths and release-bundle creation.
+- [x] Validate the production-only bundle from an isolated directory without dev dependencies and confirm contributor frozen-install reproducibility.

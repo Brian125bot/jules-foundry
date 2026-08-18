@@ -50,7 +50,8 @@ async function startServer() {
   app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
   registerLocalStorageRoutes(app);
   if (process.env.NODE_ENV === "development" && !process.env.FOUNDRY_STATIC_DIR) {
-    const { setupVite } = await import("./vite");
+    const viteModuleUrl = new URL("./vite.ts", import.meta.url).href;
+    const { setupVite } = await import(viteModuleUrl);
     await setupVite(app, server);
   } else serveLocalStatic(app);
 

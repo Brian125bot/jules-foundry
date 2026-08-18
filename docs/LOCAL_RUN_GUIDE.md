@@ -16,6 +16,23 @@ pnpm start
 
 `pnpm start` builds the browser and server, starts the local process on `127.0.0.1`, and opens a one-time authenticated browser session. All application data is written to the operating-system application-data directory rather than the repository checkout.
 
+## Direct-user bundle
+
+For users who do not need source code, build tools, tests, or a package-manager installation, a maintainer can create a production-only bundle after running the local release gate:
+
+```bash
+pnpm release:verify
+pnpm local:bundle
+```
+
+The command writes a platform-specific directory and, where `tar` is available, a `.tar.gz` archive under `local-release/`. The bundle includes the prebuilt browser and server output, local SQLite migrations, and production dependencies only; contributor source, tests, Vite, TypeScript, and pnpm tooling are omitted. A direct user installs **Node.js 22**, extracts the matching bundle, and runs:
+
+```bash
+node start-local.mjs
+```
+
+The bundle starts immediately without `pnpm`, Vite, TypeScript, tests, or a frontend build. It uses the same loopback-only security model and Credential vault as a contributor checkout.
+
 ## Add provider credentials
 
 No separate setup utility is required. After the browser opens, select **Credential vault** in the application and add the Gemini, Jules, and GitHub credentials you intend to use. Foundry encrypts submitted values in the local vault, never returns their plaintext to the browser, and displays only masked identifiers after saving. Use the vault’s **Test** action for each provider before creating an initiative.
