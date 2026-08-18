@@ -12,3 +12,9 @@ The reconciliation path now stores a restart-safe monitor checkpoint containing 
 | Desktop mission workspace | Session Command Deck verified with provider state, local hold, freshness, audit, and state-aware controls |
 
 > Automatic periodic reconciliation is intentionally not activated in this checkpoint. It requires a published deployment and an authenticated scheduled callback; until then, the operator-controlled **Refresh** and **Reconcile** commands perform the same idempotent checkpointed observation safely.
+
+## Current release evidence
+
+The current release baseline contains 13 Vitest files and 52 passing tests. Router regressions cover local-hold idempotency, typed provider deletion confirmation, provider-state drift, monitor checkpoint success/failure persistence, retry metadata, and provider activity deduplication. A real terminal Jules session was also reviewed without issuing a new provider action; its task detail showed terminal state, activity ledger, recorded poll attempts, artifacts, cost rows, and Session Command Deck context.
+
+The persisted checkpoint, provider activity cursor, retry/error metadata, and task-level lease form the prerequisite for the planned branch-verification queue. A future verifier can reuse these durable observations to enqueue one immutable branch snapshot per terminal head SHA without adding fragile in-process polling.
