@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, KeyRound, Plus, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, DatabaseBackup, KeyRound, MonitorCheck, Plus, RotateCw, ShieldCheck, Trash2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
@@ -24,9 +24,11 @@ export default function Credentials() {
   const [secret, setSecret] = useState("");
   const utils = trpc.useUtils();
   const profiles = trpc.foundry.credentials.list.useQuery();
+  const localStatus = trpc.local.status.useQuery();
   const save = trpc.foundry.credentials.save.useMutation({ onSuccess: () => { toast.success(editing ? "Credential rotated" : "Credential saved", { description: "The raw secret is no longer available to the browser." }); utils.foundry.credentials.list.invalidate(); setOpen(false); setEditing(null); setLabel(""); setSecret(""); } });
   const test = trpc.foundry.credentials.test.useMutation({ onSuccess: result => { toast[result.ok ? "success" : "error"](result.ok ? "Connection verified" : "Credential test failed", { description: result.message }); utils.foundry.credentials.list.invalidate(); } });
   const remove = trpc.foundry.credentials.delete.useMutation({ onSuccess: () => { toast.success("Credential removed"); utils.foundry.credentials.list.invalidate(); } });
+  const createBackup = trpc.local.createBackup.useMutation({ onSuccess: backup => toast.success("Local backup created", { description: `${backup.filename} was created in your local Foundry backup directory.` }), onError: error => toast.error("Local backup failed", { description: error.message }) });
   const begin = (item?: any) => { setEditing(item ?? null); setProvider(item?.provider ?? "jules"); setLabel(item?.label ?? ""); setSecret(""); setOpen(true); };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!secret.trim()) return toast.error("Enter the replacement secret before saving."); save.mutate({ provider, label, secret, credentialId: editing?.id }); };
 
@@ -45,6 +47,7 @@ export default function Credentials() {
         })}
       </div>
       <div className="rounded-2xl border border-cyan-100 bg-cyan-50/50 p-5 lg:p-6"><div className="flex gap-3"><ShieldCheck className="h-5 w-5 shrink-0 text-cyan-700" /><div><h3 className="text-sm font-semibold text-slate-900">Credential handling boundary</h3><p className="mt-1 text-sm leading-6 text-slate-600">Raw values travel from this form to the protected backend only. They are encrypted before persistence, omitted from all list/read procedures, excluded from mission events, and cannot be retrieved by this dashboard after the initial submission.</p></div></div></div>
+      <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-center rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_-25px_rgba(15,23,42,0.28)] lg:p-6"><div className="flex gap-3"><MonitorCheck className="h-5 w-5 shrink-0 text-cyan-700" /><div><h3 className="text-sm font-semibold text-slate-900">Trusted-machine local runtime</h3><p className="mt-1 text-sm leading-6 text-slate-600">Foundry is listening only on this machine’s loopback interface. Its SQLite audit database and encrypted credential blobs are stored locally; Gemini, Jules, and GitHub remain the only intentional outbound provider calls.</p><p className="mt-2 text-[11px] font-medium text-slate-500">{localStatus.data?.monitoringRunsOnlyWhileApplicationIsRunning ? "Monitoring resumes checkpointed sessions while Foundry is running." : "Checking local runtime status…"}</p></div></div><Button variant="outline" onClick={() => createBackup.mutate()} disabled={createBackup.isPending} className="border-slate-300"><DatabaseBackup className="mr-2 h-4 w-4" />{createBackup.isPending ? "Creating backup…" : "Create local backup"}</Button></div>
     </div>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>{editing ? "Rotate credential" : "Add credential"}</DialogTitle><DialogDescription>{editing ? "Enter a replacement secret. The previous value is never shown or copied back to this interface." : "Credential values are treated as write-only and are never returned after saving."}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4"><div className="space-y-2"><Label>Provider</Label><Select value={provider} onValueChange={value => setProvider(value as typeof provider)} disabled={Boolean(editing)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{providers.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label htmlFor="label">Label</Label><Input id="label" value={label} onChange={event => setLabel(event.target.value)} placeholder="Primary engineering account" required /></div><div className="space-y-2"><Label htmlFor="secret">{editing ? "Replacement secret" : "Secret"}</Label><Input id="secret" type="password" value={secret} onChange={event => setSecret(event.target.value)} placeholder="Paste a provider credential" autoComplete="off" required /></div><Button type="submit" className="w-full bg-slate-950 text-white hover:bg-slate-800" disabled={save.isPending}>{save.isPending ? "Sealing credential…" : editing ? "Rotate credential" : "Save credential"}</Button></form></DialogContent></Dialog>
   </DashboardLayout>;

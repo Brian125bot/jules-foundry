@@ -100,3 +100,16 @@
 - [x] Compose and document a trusted-machine local-first migration plan that removes hosted authentication and managed database dependencies.
 - [x] Review the trusted-machine local-first migration plan for completeness and technical consistency.
 - [x] Commit and publish the trusted-machine local-first migration plan to GitHub main.
+- [x] Replace hosted OAuth and account synchronization with loopback-only local-instance protection and seeded single-operator identity.
+- [x] Replace managed MySQL/TiDB persistence with a local SQLite database and transactional migration tooling while preserving audit, idempotency, lease, and evidence constraints.
+- [x] Replace platform-derived vault encryption and hosted storage with OS-backed or passphrase-backed local secret keying and controlled local artifact storage.
+- [x] Replace hosted scheduling assumptions with a local monitor supervisor that resumes checkpointed Jules sessions safely while the application is running.
+- [x] Remove hosted analytics, storage proxy, OAuth routes, and platform environment dependencies from the local runtime and expose local-operation status in the UI.
+- [x] Expand regression coverage for local-instance security, SQLite data invariants, local vault and storage boundaries, monitor recovery, and backup or restore behavior.
+- [x] Update installation, operations, migration, and security documentation for the trusted-machine local-first edition.
+- [x] Run full static, unit, integration, migration, and production-build release gates for the local-first edition.
+- [ ] Commit, checkpoint, and publish the verified trusted-machine local-first implementation to GitHub main.
+- [ ] Run and record an end-to-end local bootstrap validation that reaches the seeded local operator dashboard through the one-time loopback session flow.
+- [x] Audit the repository for active hosted analytics, runtime environment, and platform dependencies, then remove or document any remaining non-runtime references.
+- [x] Add and run restart-based monitor-checkpoint recovery and restore-path verification coverage for the local SQLite runtime.
+- [x] Restore a backup into a fresh local SQLite runtime path and verify the seeded operator plus persisted mission records remain usable after reopen.

@@ -21,6 +21,11 @@ export const pollAttemptKey = (taskId: number, bucket: number) => `poll:${taskId
 /** Conservative planning estimate only; never a substitute for provider-issued billing. */
 export const ESTIMATED_CENTS_PER_PROVIDER_CALL = 1;
 
+function insertedId(result: { lastInsertRowid?: bigint }) {
+  if (typeof result.lastInsertRowid !== "bigint") throw new Error("Local SQLite insert did not return a row id.");
+  return Number(result.lastInsertRowid);
+}
+
 export function resolveCredentialWriteTarget(selectedCredentialId: number | undefined, matchingCredentialId: number | undefined) {
   if (matchingCredentialId && matchingCredentialId !== selectedCredentialId) return { targetId: matchingCredentialId, redundantId: selectedCredentialId ?? null };
   return { targetId: selectedCredentialId ?? matchingCredentialId ?? null, redundantId: null };
@@ -114,9 +119,9 @@ async function beginSessionControl(input: { taskId: number; sessionName?: string
   if (existing) return { control: existing, reused: true };
   const lease = (await db.select().from(taskControlLeases).where(eq(taskControlLeases.taskId, input.taskId)).limit(1))[0];
   if (lease && lease.expiresAt > new Date() && lease.controlDigest !== inputDigest) throw new TRPCError({ code: "CONFLICT", message: "Another session control is in flight for this task. Refresh the command ledger and retry after it completes." });
-  await db.insert(taskControlLeases).values({ taskId: input.taskId, heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000) }).onDuplicateKeyUpdate({ set: { heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000) } });
+  await db.insert(taskControlLeases).values({ taskId: input.taskId, heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000) }).onConflictDoUpdate({ target: taskControlLeases.taskId, set: { heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000), updatedAt: new Date() } });
   const result = await db.insert(sessionControls).values({ taskId: input.taskId, julesSessionName: input.sessionName ?? null, controlType: input.type, requestedBy: input.userId, idempotencyKey, inputDigest, reason: input.reason ?? null, preconditionSnapshot: JSON.stringify(input.snapshot), status: "pending", stateBefore: (input.snapshot as { julesState?: string | null }).julesState ?? null, sentAt: new Date() });
-  return { control: { id: Number(result[0].insertId), idempotencyKey }, reused: false };
+  return { control: { id: insertedId(result), idempotencyKey }, reused: false };
 }
 
 async function finishSessionControl(controlId: number, outcome: "succeeded" | "failed" | "timed_out" | "unknown", input: { stateAfter?: string | null; error?: string; response?: unknown; eventId?: string }) {
@@ -132,7 +137,7 @@ async function createAttempt(taskId: number, type: "dispatch" | "poll" | "approv
   if (existing) { await recordEvent(taskId, "local", `${type}_attempt_reused`, `Idempotency key reused for ${type} attempt.`, { key, outcome: existing.outcome }); return { attempt: existing, reused: true }; }
   const result = await db.insert(taskAttempts).values({ taskId, attemptType: type, idempotencyKey: key, outcome: "pending", apiCallCount: 0 });
   await recordEvent(taskId, "local", `${type}_attempt_started`, `Started ${type} attempt.`, { key });
-  return { attempt: { id: Number(result[0].insertId), taskId, idempotencyKey: key }, reused: false };
+  return { attempt: { id: insertedId(result), taskId, idempotencyKey: key }, reused: false };
 }
 
 async function finishAttempt(attemptId: number, outcome: "success" | "failure" | "reused", started: number, details?: unknown, backoffReason?: string) {
@@ -141,7 +146,7 @@ async function finishAttempt(attemptId: number, outcome: "success" | "failure" |
   await db.update(taskAttempts).set({ outcome, apiCallCount: 1, estimatedSpendCents: ESTIMATED_CENTS_PER_PROVIDER_CALL, elapsedMs: Date.now() - started, details: details ? JSON.stringify(details) : null, backoffReason: backoffReason ?? null, completedAt: new Date() }).where(eq(taskAttempts.id, attemptId));
 }
 
-async function pollOne(user: number, taskId: number, bucket = Math.floor(Date.now() / 30000)) {
+export async function pollOne(user: number, taskId: number, bucket = Math.floor(Date.now() / 30000)) {
   const record = await getTaskForUser(user, taskId);
   if (!record?.task.julesSessionName) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This task has not been dispatched to Jules." });
   const key = pollAttemptKey(record.task.id, bucket);
@@ -163,7 +168,7 @@ async function pollOne(user: number, taskId: number, bucket = Math.floor(Date.no
     const db = requireDb(await getDb());
     await db.update(tasks).set({ julesState: sessionState, state: nextState, health, lastPolledAt: new Date(), lastActivityAt: activityTime, prUrl, julesPlan: plan ? JSON.stringify(plan) : record.task.julesPlan, lastError: null }).where(eq(tasks.id, record.task.id));
     const latency = Date.now() - started; const nextDelay = nextPollDelaySeconds(sessionState, 0);
-    await db.insert(sessionMonitorCheckpoints).values({ taskId: record.task.id, julesSessionName: record.task.julesSessionName, lastActivityId: activity?.id ?? null, latestProviderUpdateTime: response.session?.updateTime ? new Date(response.session.updateTime) : null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastError: null, lastLatencyMs: latency, responseDigest: digestPayload(response), monitorVersion: "session-monitor-v1" }).onDuplicateKeyUpdate({ set: { lastActivityId: activity?.id ?? null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastError: null, lastLatencyMs: latency, responseDigest: digestPayload(response) } });
+    await db.insert(sessionMonitorCheckpoints).values({ taskId: record.task.id, julesSessionName: record.task.julesSessionName, lastActivityId: activity?.id ?? null, latestProviderUpdateTime: response.session?.updateTime ? new Date(response.session.updateTime) : null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastError: null, lastLatencyMs: latency, responseDigest: digestPayload(response), monitorVersion: "session-monitor-v1" }).onConflictDoUpdate({ target: sessionMonitorCheckpoints.taskId, set: { lastActivityId: activity?.id ?? null, latestProviderUpdateTime: response.session?.updateTime ? new Date(response.session.updateTime) : null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastError: null, lastLatencyMs: latency, responseDigest: digestPayload(response), updatedAt: new Date() } });
     await recordEvent(record.task.id, "jules", "session_polled", `Jules reports ${sessionState}.`, { sessionState, activityCount: response.activities.length, prUrl }, { previous, next: sessionState });
     for (const item of response.activities.slice(-8)) {
       const type = item.planGenerated ? "plan_generated" : item.progressUpdated ? "progress_updated" : item.agentMessaged ? "agent_messaged" : item.sessionCompleted ? "session_completed" : item.sessionFailed ? "session_failed" : "activity";
@@ -183,7 +188,7 @@ async function pollOne(user: number, taskId: number, bucket = Math.floor(Date.no
     const db = requireDb(await getDb());
     await db.update(tasks).set({ health: "attention", lastError: message.slice(0, 500), lastPolledAt: new Date() }).where(eq(tasks.id, record.task.id));
     const retryDelay = nextPollDelaySeconds(record.task.julesState, 1);
-    await db.insert(sessionMonitorCheckpoints).values({ taskId: record.task.id, julesSessionName: record.task.julesSessionName, observedState: record.task.julesState, lastAttemptAt: new Date(), nextRecommendedPollAt: retryDelay ? new Date(Date.now() + retryDelay * 1000) : null, errorStreak: 1, lastError: message.slice(0, 500), monitorVersion: "session-monitor-v1" }).onDuplicateKeyUpdate({ set: { observedState: record.task.julesState, lastAttemptAt: new Date(), nextRecommendedPollAt: retryDelay ? new Date(Date.now() + retryDelay * 1000) : null, errorStreak: sql`${sessionMonitorCheckpoints.errorStreak} + 1`, lastError: message.slice(0, 500) } });
+    await db.insert(sessionMonitorCheckpoints).values({ taskId: record.task.id, julesSessionName: record.task.julesSessionName, observedState: record.task.julesState, lastAttemptAt: new Date(), nextRecommendedPollAt: retryDelay ? new Date(Date.now() + retryDelay * 1000) : null, errorStreak: 1, lastError: message.slice(0, 500), monitorVersion: "session-monitor-v1" }).onConflictDoUpdate({ target: sessionMonitorCheckpoints.taskId, set: { observedState: record.task.julesState, lastAttemptAt: new Date(), nextRecommendedPollAt: retryDelay ? new Date(Date.now() + retryDelay * 1000) : null, errorStreak: sql`${sessionMonitorCheckpoints.errorStreak} + 1`, lastError: message.slice(0, 500), updatedAt: new Date() } });
     await recordEvent(record.task.id, "local", "poll_failed", message, { message });
     await finishAttempt(stored.attempt.id, "failure", started, { message }, "provider request failed");
     throw error;
@@ -213,7 +218,7 @@ export const foundryRouter = router({
         return { id: existing.id, updated: true };
       }
       const result = await db.insert(credentialProfiles).values({ userId: user, ...nextValues });
-      return { id: Number(result[0].insertId), updated: false };
+      return { id: insertedId(result), updated: false };
     }),
     test: protectedProcedure.input(z.object({ credentialId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb());
@@ -249,7 +254,7 @@ export const foundryRouter = router({
     create: protectedProcedure.input(z.object({ title: z.string().min(3).max(180), prompt: z.string().min(20).max(12000), repository: z.string().regex(/^[^/]+\/[^/]+$/), branch: z.string().min(1).max(255), baseSha: z.string().max(80).optional(), budgetCents: z.number().int().min(10).max(500000).default(500), geminiModel: z.string().default(DEFAULT_GEMINI_MODEL).refine(isSupportedGeminiModel, "Choose a supported Gemini model.") })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb());
       const result = await db.insert(initiatives).values({ ...input, userId: userId(ctx) });
-      return { id: Number(result[0].insertId) };
+      return { id: insertedId(result) };
     }),
     deletePreview: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const db = requireDb(await getDb());
@@ -297,7 +302,7 @@ export const foundryRouter = router({
       const taskResults = [] as Array<{ id: number; index: number }>;
       for (const [index, task] of Array.from(insertTasks.entries())) {
         const inserted = await db.insert(tasks).values(task);
-        const taskId = Number(inserted[0].insertId);
+        const taskId = insertedId(inserted);
         taskResults.push({ id: taskId, index });
         await recordEvent(taskId, "gemini", "task_compiled", "Gemini structured output passed deterministic dependency-DAG validation.", { dependencyCount: compiled.tasks[index].dependencies.length, riskTier: compiled.tasks[index].riskTier, geminiModel: model });
         for (const criterion of compiled.tasks[index].acceptanceCriteria) {
@@ -463,7 +468,7 @@ export const foundryRouter = router({
       const prior = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
       const decision = critic.recommendation === "human_review_required" ? "human_review" as const : critic.recommendation === "revise_before_dispatch" ? "revise" as const : "draft" as const;
       const result = await db.insert(qualityContracts).values({ initiativeId: initiative.id, version: (prior?.version ?? 0) + 1, outcome: contract.outcome, contractJson: JSON.stringify({ ...contract, geminiModel: model }), criticJson: JSON.stringify({ ...critic, geminiModel: model }), ambiguityScore: critic.ambiguityScore, decision });
-      const contractId = Number(result[0].insertId);
+      const contractId = insertedId(result);
       const initiativeTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
       await Promise.all(initiativeTasks.map(task => recordEvent(task.id, "gemini", "quality_contract_generated", "Generated a bounded delivery contract and independent critique for operator review.", { contractId, version: (prior?.version ?? 0) + 1, ambiguityScore: critic.ambiguityScore, recommendation: critic.recommendation, geminiModel: model })));
       return { id: contractId, version: (prior?.version ?? 0) + 1, decision, contract, critic };
@@ -489,7 +494,7 @@ export const foundryRouter = router({
       const existing = (await db.select().from(qualityPrompts).where(eq(qualityPrompts.promptDigest, promptDigest)).limit(1))[0];
       if (existing) return { ...existing, reused: true };
       const result = await db.insert(qualityPrompts).values({ taskId: record.task.id, contractId: contract?.id ?? null, templateVersion: "proof-prompt-v1", promptDigest, promptText, twinJson: JSON.stringify(twin) });
-      const prompt = { id: Number(result[0].insertId), taskId: record.task.id, promptDigest, promptText, templateVersion: "proof-prompt-v1", contractId: contract?.id ?? null, twinJson: JSON.stringify(twin), reused: false };
+      const prompt = { id: insertedId(result), taskId: record.task.id, promptDigest, promptText, templateVersion: "proof-prompt-v1", contractId: contract?.id ?? null, twinJson: JSON.stringify(twin), reused: false };
       await recordEvent(record.task.id, "local", "quality_prompt_compiled", "Compiled a versioned proof-carrying prompt for operator-confirmed dispatch.", { promptDigest, contractId: contract?.id ?? null, geminiModel: record.initiative.geminiModel });
       return prompt;
     }),
@@ -510,9 +515,10 @@ export const foundryRouter = router({
       const verdict = deriveQualityVerdict({ providerFailed, deterministicPassed, criteria: proofMap, adversarialMaterialFinding });
       const summary = providerFailed ? "Deterministic proof map completed; bounded Gemini review was unavailable." : `Deterministic proof map completed with ${verdict.replaceAll("_", " ")} verdict.`;
       const result = await db.insert(qualityVerifications).values({ taskId: record.task.id, verdict, deterministicJson: JSON.stringify({ deterministicPassed, proofMap, geminiModel: record.initiative.geminiModel }), evidenceJson: JSON.stringify(timeline.evidence), adversarialJson: JSON.stringify(adversarial), summary });
-      await recordEvent(record.task.id, "local", "quality_verification_completed", summary, { verificationId: Number(result[0].insertId), verdict, deterministicPassed, providerFailed });
+      const verificationId = insertedId(result);
+      await recordEvent(record.task.id, "local", "quality_verification_completed", summary, { verificationId, verdict, deterministicPassed, providerFailed });
       await finishAttempt(attempt.attempt.id, providerFailed ? "failure" : "success", started, { verdict, deterministicPassed, providerFailed }, providerFailed ? "bounded Gemini review unavailable" : undefined);
-      return { id: Number(result[0].insertId), verdict, deterministic: { deterministicPassed, proofMap }, adversarial, reused: false };
+      return { id: verificationId, verdict, deterministic: { deterministicPassed, proofMap }, adversarial, reused: false };
     }),
     runRecovery: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = requireDb(await getDb()); const user = userId(ctx); const record = await getTaskForUser(user, input.taskId);
@@ -527,8 +533,9 @@ export const foundryRouter = router({
       const advisorText = (advisor as { failureNarrative?: string }).failureNarrative;
       const recommendation = advisorText ? `${recovery.recommendation}\n\nBounded adviser note: ${advisorText}` : recovery.recommendation;
       const result = await db.insert(qualityRecoveries).values({ taskId: record.task.id, domain: recovery.domain, recommendation, autoRetryEligible: recovery.autoRetryEligible });
-      await recordEvent(record.task.id, "local", "quality_recovery_classified", "Classified a recovery recommendation; no redispatch was created.", { recoveryId: Number(result[0].insertId), ...recovery, advisor });
-      return { id: Number(result[0].insertId), ...recovery, recommendation, advisor };
+      const recoveryId = insertedId(result);
+      await recordEvent(record.task.id, "local", "quality_recovery_classified", "Classified a recovery recommendation; no redispatch was created.", { recoveryId, ...recovery, advisor });
+      return { id: recoveryId, ...recovery, recommendation, advisor };
     }),
     getTaskQuality: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const db = requireDb(await getDb()); const record = await getTaskForUser(userId(ctx), input.taskId); if (!record) throw new TRPCError({ code: "NOT_FOUND" });
@@ -559,7 +566,7 @@ export const foundryRouter = router({
       const db = requireDb(await getDb());
       const result = await db.insert(taskEvidence).values({ ...input, reference: input.reference ?? null, detail: input.detail ?? null, digest: digestPayload({ ...input, taskId: record.task.id }) });
       await recordEvent(record.task.id, "local", "evidence_added", `Evidence added for ${input.criterionId}.`, { criterionId: input.criterionId, status: input.status });
-      return { id: Number(result[0].insertId) };
+      return { id: insertedId(result) };
     }),
     verify: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const record = await getTaskForUser(userId(ctx), input.taskId);

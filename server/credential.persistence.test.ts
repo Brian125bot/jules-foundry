@@ -76,7 +76,7 @@ describe("scope-review dispatch guard", () => {
     const db = await getDb();
     if (!db) return;
     const initiativeResult = await db.insert(initiatives).values({ userId: scopeReviewUserId, title: "Scope review regression", prompt: "Regression task", repository: "owner/repository", branch: "main", budgetCents: 100 });
-    const initiativeId = Number(initiativeResult[0].insertId);
+    const initiativeId = Number(initiativeResult.lastInsertRowid);
     const taskResult = await db.insert(tasks).values({
       initiativeId,
       taskKey: `${tokenPrefix}-scope-task`,
@@ -89,7 +89,7 @@ describe("scope-review dispatch guard", () => {
       dependencies: JSON.stringify([]),
       idempotencyKey: `${tokenPrefix}-scope-dispatch`,
     });
-    const taskId = Number(taskResult[0].insertId);
+    const taskId = Number(taskResult.lastInsertRowid);
     const caller = appRouter.createCaller(context(scopeReviewUserId));
 
     await expect(caller.foundry.dispatch.run({ taskId, requirePlanApproval: true, autoCreatePr: true })).rejects.toThrow(/scope requires review/i);

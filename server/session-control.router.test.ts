@@ -24,8 +24,8 @@ function context(): TrpcContext {
 async function createActiveTask() {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable for test");
-  const initiativeId = Number((await db.insert(initiatives).values({ userId, title: "Session control test", prompt: "Exercise guarded controls", repository: "acme/test", branch: "main", budgetCents: 100 }))[0].insertId);
-  const taskId = Number((await db.insert(tasks).values({ initiativeId, taskKey: `session-control-${Date.now()}`, title: "Guarded session control", description: "Ensure session controls are durable and operator-governed.", riskTier: "green", allowedPaths: JSON.stringify(["README.md"]), nonGoals: JSON.stringify(["Do not alter production resources."]), acceptanceCriteria: JSON.stringify([{ id: "AC-1", text: "Controls remain safe and auditable." }]), dependencies: JSON.stringify([]), idempotencyKey: `session-control-${Date.now()}`, state: "executing", health: "healthy", julesSessionName: "sessions/test-guarded", julesSessionId: "test-guarded", julesState: "IN_PROGRESS" }))[0].insertId);
+  const initiativeId = Number((await db.insert(initiatives).values({ userId, title: "Session control test", prompt: "Exercise guarded controls", repository: "acme/test", branch: "main", budgetCents: 100 })).lastInsertRowid);
+  const taskId = Number((await db.insert(tasks).values({ initiativeId, taskKey: `session-control-${Date.now()}`, title: "Guarded session control", description: "Ensure session controls are durable and operator-governed.", riskTier: "green", allowedPaths: JSON.stringify(["README.md"]), nonGoals: JSON.stringify(["Do not alter production resources."]), acceptanceCriteria: JSON.stringify([{ id: "AC-1", text: "Controls remain safe and auditable." }]), dependencies: JSON.stringify([]), idempotencyKey: `session-control-${Date.now()}`, state: "executing", health: "healthy", julesSessionName: "sessions/test-guarded", julesSessionId: "test-guarded", julesState: "IN_PROGRESS" })).lastInsertRowid);
   return { db, taskId };
 }
 

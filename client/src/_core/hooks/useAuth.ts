@@ -1,7 +1,6 @@
-import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -39,12 +38,6 @@ export function useAuth(options?: UseAuthOptions) {
       }
       throw error;
     } finally {
-      // Clear the Preview auto-login token mirrored into sessionStorage, so
-      // header-based sessions (Safari ITP / WebView) are logged out too. The
-      // backend cookie is cleared by the logout mutation.
-      try {
-        sessionStorage.removeItem("manus-cookie");
-      } catch {}
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }
@@ -52,7 +45,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   const state = useMemo(() => {
     localStorage.setItem(
-      "manus-runtime-user-info",
+      "jules-foundry-local-operator",
       JSON.stringify(meQuery.data)
     );
     return {
@@ -69,26 +62,8 @@ export function useAuth(options?: UseAuthOptions) {
     logoutMutation.isPending,
   ]);
 
-  useEffect(() => {
-    if (!redirectOnUnauthenticated) return;
-    if (meQuery.isLoading || logoutMutation.isPending) return;
-    if (state.user) return;
-    if (typeof window === "undefined") return;
-    if (redirectPath && window.location.pathname === redirectPath) return;
-
-    // Navigate at this moment only. startLogin() mints the nonce + cookie itself.
-    if (redirectPath) {
-      window.location.href = redirectPath;
-    } else {
-      startLogin();
-    }
-  }, [
-    redirectOnUnauthenticated,
-    redirectPath,
-    logoutMutation.isPending,
-    meQuery.isLoading,
-    state.user,
-  ]);
+  void redirectOnUnauthenticated;
+  void redirectPath;
 
   return {
     ...state,

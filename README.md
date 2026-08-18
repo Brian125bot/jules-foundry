@@ -1,165 +1,87 @@
 # Jules Foundry
 
-<p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript" alt="TypeScript">
-  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19">
-  <img src="https://img.shields.io/badge/tRPC-11-blue?logo=trpc" alt="tRPC 11">
-  <img src="https://img.shields.io/badge/Drizzle-ORM-brightgreen" alt="Drizzle ORM">
-  <img src="https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss" alt="Tailwind CSS">
-</p>
+**Jules Foundry** is a trusted-machine, local-first orchestration console for Google Jules coding sessions. It compiles bounded initiatives with Gemini, validates GitHub scope and branches, dispatches and supervises Jules sessions, preserves an auditable mission ledger, and applies its Quality Mesh before an operator accepts results.
 
-**Jules Foundry** is an enterprise-grade control plane and orchestration platform for autonomous coding agents (Google Jules, Gemini, and GitHub). It converts high-level natural language engineering intent into a governed, dependency-aware task graph (DAG), manages idempotent agent session dispatches, enforces strict path containment policies, and orchestrates an automated **Quality Mesh** for rigorous verification and evidence-backed closeout.
+The application runs on one operator’s machine. Its UI, SQLite audit database, local artifact store, backups, session-control ledger, evidence dossiers, and encrypted credential records remain local. The only intended outbound connections are to **Gemini**, **Google Jules**, and **GitHub**, and they originate only from the local server process.
 
----
+## Local-first architecture
 
-## 🌟 Key Features
-
-### 1. 🛡️ Write-Only Credential Vault
-- **Zero-Leak Design**: Secrets (Jules API keys, Gemini API keys, GitHub Fine-Grained Personal Access Tokens) are encrypted server-side using AES-256-GCM / SHA-256 derived keys.
-- **Masked Previews**: Only masked suffixes (e.g. `...a1b2`), labels, status, and test outputs are returned to the frontend.
-- **Provider Connection Testing**: Live connection verification endpoints for Jules (`/v1alpha/sources`), Gemini (`/v1beta/models`), and GitHub (`/user`).
-
-### 2. ⚡ Gemini-Powered DAG Task Compiler
-- **Structured Task Generation**: Transforms raw prompt intent into a directed acyclic graph (DAG) of focused tasks using Gemini 2.5 Flash structured output schemas.
-- **Deterministic DAG Validation**: Built-in cycle detection, self-dependency prevention, and duplicate title validation before database persistence.
-- **Scope Containment**: Every task strictly defines `allowedPaths`, `nonGoals`, `acceptanceCriteria`, and `dependencies`. Tasks omitting explicit allowed paths are automatically quarantined into a `red` risk tier requiring operator scope review.
-
-### 3. 🚦 Bounded Jules Dispatch & Path Reservations
-- **Conflict Prevention**: Active tasks lock their `allowedPaths`. Sibling tasks attempting to dispatches with overlapping allowed paths are automatically blocked with explicit reservation conflict messages.
-- **Source & Branch Validation**: Pre-flight checks verify that the repository is connected to Jules and that the target branch exists on GitHub before creating a session.
-- **Proof-Carrying Prompts**: Automatically constructs versioned, proof-carrying prompts embedding explicit criteria identifiers (`AC-1`, `AC-2`) and reporting protocols for Jules.
-
-### 4. 🎛️ Session Command Deck & Granular Governance
-- **State-Aware Control Matrix**: Interactive control plane displaying real-time Jules state, Foundry health (`healthy`, `stale`, `attention`, `terminal`), age, and action availability.
-- **Operator Session Controls**: Supports `refresh`, `approve_plan`, `send_message`, `set_local_hold`, `release_local_hold`, `reconcile`, and `request_delete`.
-- **Short-Lived Action Leases**: Prevents concurrent operators from executing race-conditioned commands on the same task.
-- **Typed Destructive Confirmation**: Destructive provider deletion requires typing the exact session name to confirm execution.
-
-### 5. 🕸️ Quality Mesh & Evidence Verification
-- **Quality Contracts & Independent Critic**: Generates bounded delivery contracts with independent AI critique scoring ambiguity (0–100) and recommending operator actions.
-- **Three-Lens Verification**: Evaluates terminal tasks across three lenses:
-  1. *Deterministic Lens*: Validates test outputs, git diffs, allowed path constraints, and PR status.
-  2. *Evidence Lens*: Maps activity artifacts to acceptance criteria (`proven`, `partial`, `unproven`, `contradicted`).
-  3. *Adversarial Lens*: Bounded Gemini reviewer searches for omissions, scope creep, and false proof.
-- **Failure Taxonomy & Recovery**: Classifies failures into six domains (`contract`, `prompt`, `scope`, `environment`, `implementation`, `provider_uncertainty`) and suggests actionable recovery briefs without blind re-dispatching.
-- **Exportable Dossiers**: Generates markdown evidence dossiers for complete audit trails.
-
----
-
-## 🏗️ System Architecture
-
-```
-                               ┌─────────────────────────────────────────┐
-                               │            JULES FOUNDRY UI             │
-                               │ (React 19 / Tailwind / Wouter / Lucide) │
-                               └────────────────────┬────────────────────┘
-                                                    │ tRPC (HTTP/Batch)
-                                                    ▼
-┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                           EXPRESS SERVER                                               │
-│                                                                                                        │
-│  ┌─────────────────────────┐    ┌─────────────────────────┐    ┌────────────────────────────────────┐  │
-│  │    Credential Vault     │    │  Foundry Router & App   │    │            Quality Mesh            │  │
-│  │ (AES-256 Secret Engine) │    │  (Task DAG & Dispatch)  │    │ (Contracts, Prompts, Verifier)     │  │
-│  └────────────┬────────────┘    └────────────┬────────────┘    └────────────────┬───────────────────┘  │
-└───────────────┼──────────────────────────────┼──────────────────────────────────┼──────────────────────┘
-                │                              │                                  │
-                ▼                              ▼                                  ▼
-      ┌──────────────────┐           ┌──────────────────┐               ┌──────────────────┐
-      │  GitHub REST API │           │  Jules REST API  │               │ Gemini 2.5 Flash │
-      │ (Branch & Repos) │           │ (Sessions/Events)│               │ (Compiler/Critique│
-      └──────────────────┘           └──────────────────┘               └──────────────────┘
+```mermaid
+flowchart LR
+  Operator[Trusted-machine operator] --> Browser[Local browser UI]
+  Browser -->|loopback tRPC| Foundry[Foundry service]
+  Foundry --> SQLite[(Local SQLite ledger)]
+  Foundry --> Vault[Passphrase-derived local vault key]
+  Foundry --> Artifacts[Local artifacts and backups]
+  Foundry --> Providers[Gemini · Jules · GitHub]
 ```
 
----
+The server binds to **`127.0.0.1` only**. At launch it opens a one-time bootstrap URL and exchanges it for a short-lived, `HttpOnly`, `SameSite=Strict` local session cookie. The bootstrap capability is never persisted and is not written to application logs. There is no cloud account, OAuth exchange, managed database, hosted object storage, analytics service, or cloud scheduler in the local runtime.
 
-## 🛠️ Quick Start
+## Prerequisites
 
-### Prerequisites
-- **Node.js**: v20 or higher
-- **pnpm**: v10 or higher
-- **MySQL / PlanetScale / MariaDB**: Compatible database instance
+| Requirement | Purpose |
+|---|---|
+| Node.js 22 or later | Runs the local service and build tooling. |
+| pnpm 10 or later | Installs locked dependencies. |
+| A trusted user account on the machine | Holds the local data directory and vault passphrase. |
+| Gemini, Jules, and GitHub credentials | Entered later in the write-only Credential vault; they are not environment variables. |
 
-### Environment Setup
+## Install and start
 
-Create a `.env` file in the root directory:
-
-```env
-DATABASE_URL=mysql://user:password@localhost:3306/jules_foundry
-JWT_SECRET=your-32-byte-secure-random-secret-key
-NODE_ENV=development
-PORT=3000
-```
-
-### Installation & Database Migration
+Set a strong vault passphrase in the **local launch environment**. This passphrase derives the encryption key for local credential blobs and is kept in process memory only while Foundry is running. Use a password manager, operating-system secret launcher, or another owner-controlled mechanism; do not commit it to the repository.
 
 ```bash
-# Install dependencies
+export FOUNDRY_VAULT_PASSPHRASE="use-a-long-unique-local-passphrase"
+
 pnpm install
-
-# Run database migrations
-pnpm db:push
-
-# Verify TypeScript types
-pnpm check
-
-# Run Vitest test suite
-JWT_SECRET=test-secret-key-123 pnpm test
-```
-
-### Development Server
-
-```bash
 pnpm dev
 ```
 
-The application will start at `http://localhost:3000`.
+Foundry initializes its SQLite schema automatically, seeds the single `Local operator` identity, starts its monitor supervisor, and opens the one-time local browser session. If browser launching is unavailable on a headless machine, use the local launcher output rather than navigating to the port directly. Set `FOUNDRY_OPEN_BROWSER=false` only when a trusted wrapper handles the launch capability.
 
----
+After the dashboard opens, configure and test Jules, Gemini, and GitHub credentials in **Credential vault**. Values are encrypted before persistence, never returned to the browser after submission, omitted from list procedures and mission events, and shown only as masked suffixes.
 
-## 📂 Project Structure
+## Local data and backups
 
-```
-.
-├── client/                     # Frontend SPA (React 19, Wouter, Tailwind v4, TanStack Query)
-│   ├── src/
-│   │   ├── components/         # UI primitives and shared layout widgets
-│   │   ├── contexts/           # Theme and state providers
-│   │   ├── pages/              # Command Center, Fleet, Initiatives, TaskDetail, Credentials
-│   │   └── App.tsx             # Application router and layout wrapper
-├── server/                     # Backend API (Express, tRPC v11, Drizzle ORM)
-│   ├── _core/                  # Authentication, cookies, environment configuration
-│   ├── routers/                # Foundry tRPC procedures (credentials, initiatives, dispatch, quality)
-│   ├── services/               # Core services (vault, providers, session-control, quality)
-│   └── db.ts                   # Database helper functions and ORM connections
-├── drizzle/                    # Database schemas and migrations
-│   ├── schema.ts               # MySQL table definitions (tasks, events, quality contracts, etc.)
-│   └── migrations/             # SQL migration files
-├── docs/                       # Detailed documentation suite
-│   ├── ARCHITECTURE.md         # Deep-dive system architecture guide
-│   ├── API_AND_SCHEMA.md       # Database schema and tRPC API reference
-│   ├── SECURITY_AND_GOVERNANCE.md # Security model, vault design, and path containment
-│   └── QUICKSTART_GUIDE.md    # Developer onboarding and setup guide
-└── summary.md                  # Comprehensive codebase summary
-```
+Foundry writes data outside the repository, using the operating system’s application-data convention:
 
----
+| Platform | Default directory |
+|---|---|
+| Linux | `$XDG_DATA_HOME/jules-foundry` or `~/.local/share/jules-foundry` |
+| macOS | `~/Library/Application Support/JulesFoundry` |
+| Windows | `%APPDATA%\JulesFoundry` |
 
-## 🧪 Testing
+The directory contains `foundry.sqlite`, the SQLite write-ahead-log companion files while active, `artifacts/`, `backups/`, `logs/`, and a non-secret vault salt. Use **Create local backup** in Credential vault to produce a SQLite-consistent backup through `VACUUM INTO`; do not copy a live database file by itself while its WAL is active.
 
-The repository maintains full unit and integration test coverage using Vitest.
+Backup files contain encrypted credential ciphertext, never plaintext provider keys. Restoring a credential record requires the original local vault passphrase. If the passphrase is unavailable, re-enter credentials in the local vault; Foundry intentionally has no secret-export mechanism.
+
+## Monitoring and operation
+
+The local monitor supervisor polls only due, non-terminal Jules sessions while Foundry is running. It uses persisted monitor checkpoints, activity identifiers, session-control leases, and idempotency keys, so restart recovery does not replay previously observed provider activity or create uncontrolled redispatch loops.
+
+When Foundry closes or the computer sleeps, remote Jules work can continue but Foundry monitoring pauses locally. On the next launch, Foundry resumes from durable checkpoints. It never silently approves plans, deletes sessions, accepts evidence, merges code, or redispatches work; these remain explicit operator decisions.
+
+## Development and verification
 
 ```bash
-# Run all tests
-JWT_SECRET=test-secret-key-123 pnpm test
+# Generate a new local SQLite migration after editing drizzle/schema.ts
+pnpm db:generate
 
-# Run tests in watch mode
-JWT_SECRET=test-secret-key-123 pnpm vitest
+# Type-check the application
+pnpm check
+
+# Run all governance and local-first tests
+FOUNDRY_VAULT_PASSPHRASE="test-only-value" pnpm test
+
+# Build the production local service and browser bundle
+pnpm build
 ```
 
----
+The current suite covers task graph validation, credential write-only behavior, dispatch and poll idempotency, Quality Mesh verdicts, session controls, initiative deletion safeguards, Gemini model selection, local session rejection and bootstrap exchange, local SQLite initialization, backup integrity, storage-root containment, passphrase-backed vault encryption, and restart-safe monitor checkpoint selection.
 
-## 📄 License
+## Security boundary
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+The local runtime is designed for a **single trusted machine**, not shared-host or multi-tenant operation. Keep the data directory owner-only, do not expose the loopback port with a tunnel or reverse proxy, and do not run the local data directory from a network filesystem. Gemini, Jules, and GitHub calls remain network operations and can be disabled by removing or deleting their local credential profiles.
+
+For detailed operational procedures and migration notes, see [Local-first operations](docs/local_first_operations.md), the [local runtime dependency audit](docs/local_runtime_dependency_audit.md), and the [trusted-machine migration plan](docs/trusted_machine_local_first_migration_plan.md).

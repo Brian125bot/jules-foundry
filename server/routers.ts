@@ -1,18 +1,21 @@
-import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import { clearLocalSession, localRuntimeStatus } from "./local-runtime";
+import { createLocalBackup, verifyLocalBackup } from "./local-db";
 import { foundryRouter } from "./routers/foundry";
 
 export const appRouter = router({
-  system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      clearLocalSession(ctx.res);
       return { success: true } as const;
     }),
+  }),
+  local: router({
+    status: protectedProcedure.query(() => localRuntimeStatus()),
+    createBackup: protectedProcedure.mutation(() => createLocalBackup()),
+    verifyBackup: protectedProcedure.input(z.object({ filename: z.string().min(1).max(255) })).mutation(({ input }) => verifyLocalBackup(input.filename)),
   }),
   foundry: foundryRouter,
 });

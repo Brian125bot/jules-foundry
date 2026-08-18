@@ -3,60 +3,39 @@ import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
-type CookieCall = {
-  name: string;
-  options: Record<string, unknown>;
-};
-
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
-function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
-  const clearedCookies: CookieCall[] = [];
-
+function createAuthContext(): { ctx: TrpcContext; headers: Array<{ name: string; value: string }> } {
+  const headers: Array<{ name: string; value: string }> = [];
   const user: AuthenticatedUser = {
     id: 1,
-    openId: "sample-user",
-    email: "sample@example.com",
-    name: "Sample User",
-    loginMethod: "manus",
-    role: "user",
+    openId: "local-operator",
+    email: null,
+    name: "Local operator",
+    loginMethod: "local",
+    role: "admin",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
   };
-
-  const ctx: TrpcContext = {
-    user,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: (name: string, options: Record<string, unknown>) => {
-        clearedCookies.push({ name, options });
-      },
-    } as TrpcContext["res"],
+  return {
+    ctx: {
+      user,
+      req: { headers: {} } as TrpcContext["req"],
+      res: { setHeader: (name: string, value: string) => headers.push({ name, value }) } as TrpcContext["res"],
+    },
+    headers,
   };
-
-  return { ctx, clearedCookies };
 }
 
 describe("auth.logout", () => {
-  it("clears the session cookie and reports success", async () => {
-    const { ctx, clearedCookies } = createAuthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.auth.logout();
-
+  it("expires the local session cookie and reports success", async () => {
+    const { ctx, headers } = createAuthContext();
+    const result = await appRouter.createCaller(ctx).auth.logout();
     expect(result).toEqual({ success: true });
-    expect(clearedCookies).toHaveLength(1);
-    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
-    expect(clearedCookies[0]?.options).toMatchObject({
-      maxAge: -1,
-      secure: true,
-      sameSite: "none",
-      httpOnly: true,
-      path: "/",
-    });
+    expect(headers).toEqual([{ name: "Set-Cookie", value: expect.stringContaining(`${COOKIE_NAME}=;`) }]);
+    expect(headers[0]?.value).toContain("HttpOnly");
+    expect(headers[0]?.value).toContain("SameSite=Strict");
+    expect(headers[0]?.value).toContain("Max-Age=0");
   });
 });
