@@ -99,4 +99,4 @@
 - [x] Commit and publish the completed About and How to Use popup implementation and regression coverage to GitHub main.
 - [x] Compose and document a trusted-machine local-first migration plan that removes hosted authentication and managed database dependencies.
 - [x] Review the trusted-machine local-first migration plan for completeness and technical consistency.
-- [ ] Commit and publish the trusted-machine local-first migration plan to GitHub main.
+- [x] Commit and publish the trusted-machine local-first migration plan to GitHub main.
