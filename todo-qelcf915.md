@@ -36,3 +36,4 @@
 - [x] Add a production-only bundle assembly command and a direct-user launch command that does not build frontend sources.
 - [x] Document contributor versus direct-user installation paths and release-bundle creation.
 - [x] Validate the production-only bundle from an isolated directory without dev dependencies and confirm contributor frozen-install reproducibility.
+- [ ] Push the checkpointed prebuilt distribution workflow to GitHub and verify that local and remote `main` match.
