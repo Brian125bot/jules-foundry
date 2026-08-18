@@ -52,3 +52,7 @@
 - [x] Add regression coverage and responsive visual validation for initiative deletion controls.
 - [ ] Open and visually verify the desktop and mobile deletion dialogs, including typed confirmation and active-session lock states.
 - [x] Plan granular per-dispatch session control, tracking, safety, testing, and rollout capabilities for Jules Foundry.
+- [x] Fix control-plane containers that overflow horizontally or extend beyond the right viewport edge.
+- [x] Verify desktop and mobile containment across command center, Fleet, Initiatives, Credentials, and task detail views.
+- [x] Verify an existing task-detail mission on mobile and desktop, including controls, ledgers, and evidence sections, for remaining horizontal overflow.
+- [x] Record explicit desktop and mobile containment findings for command center, Fleet, Initiatives, Credentials, and a real mission-detail view.

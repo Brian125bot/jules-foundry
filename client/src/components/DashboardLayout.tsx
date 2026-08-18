@@ -55,6 +55,6 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
       </Sidebar>
       {!isCollapsed && <div className="absolute right-0 top-0 z-50 h-full w-1 cursor-col-resize hover:bg-cyan-300/35" onMouseDown={() => setIsResizing(true)} />}
     </div>
-    <SidebarInset className="min-h-screen bg-[#f5f7fb]">{isMobile && <div className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-white/90 px-3 backdrop-blur"><SidebarTrigger className="rounded-lg" /><span className="text-sm font-medium">{active.label}</span></div>}<main className="min-h-screen">{children}</main></SidebarInset>
+    <SidebarInset className="min-h-screen min-w-0 max-w-full overflow-x-hidden bg-[#f5f7fb]">{isMobile && <div className="sticky top-0 z-40 flex h-14 min-w-0 items-center gap-3 border-b bg-white/90 px-3 backdrop-blur"><SidebarTrigger className="rounded-lg" /><span className="truncate text-sm font-medium">{active.label}</span></div>}<main className="min-h-screen min-w-0 max-w-full overflow-x-hidden">{children}</main></SidebarInset>
   </>;
 }
