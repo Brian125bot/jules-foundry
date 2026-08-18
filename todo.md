@@ -115,3 +115,4 @@
 - [x] Restore a backup into a fresh local SQLite runtime path and verify the seeded operator plus persisted mission records remain usable after reopen.
 - [x] Assess local-install readiness and document the remaining remediation required for dependable end-user operation.
 - [x] Document the verified local-install readiness assessment and remaining end-user distribution hardening work in the repository.
+- [x] Compose and document a staged production-readiness plan for polished trusted-machine local distribution.
