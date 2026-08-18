@@ -269,11 +269,22 @@ export async function createJulesSession(secret: string, input: { prompt: string
 
 export async function pollJulesSession(secret: string, sessionName: string) {
   try {
-    const [session, activities] = await Promise.all([
-      axios.get(`${JULES_BASE_URL}/${sessionName}`, { headers: { "x-goog-api-key": secret }, timeout: 20000 }),
-      axios.get(`${JULES_BASE_URL}/${sessionName}/activities?pageSize=100`, { headers: { "x-goog-api-key": secret }, timeout: 20000 }),
-    ]);
-    return { session: session.data, activities: activities.data?.activities ?? [] };
+    const session = await axios.get(`${JULES_BASE_URL}/${sessionName}`, { headers: { "x-goog-api-key": secret }, timeout: 20000 });
+    const activities: any[] = []; let pageToken: string | undefined;
+    do {
+      const response = await axios.get(`${JULES_BASE_URL}/${sessionName}/activities`, { headers: { "x-goog-api-key": secret }, params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, timeout: 20000 });
+      activities.push(...(response.data?.activities ?? [])); pageToken = response.data?.nextPageToken;
+    } while (pageToken);
+    return { session: session.data, activities };
+  } catch (error) {
+    throw providerError(error);
+  }
+}
+
+export async function deleteJulesSession(secret: string, sessionName: string) {
+  try {
+    const response = await axios.delete(`${JULES_BASE_URL}/${sessionName}`, { headers: { "x-goog-api-key": secret }, timeout: 20000 });
+    return response.data;
   } catch (error) {
     throw providerError(error);
   }

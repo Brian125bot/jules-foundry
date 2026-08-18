@@ -88,6 +88,10 @@ export const tasks = mysqlTable(
     lastPolledAt: timestamp("lastPolledAt"),
     lastActivityAt: timestamp("lastActivityAt"),
     lastError: varchar("lastError", { length: 500 }),
+    localHold: int("localHold").default(0).notNull(),
+    localHoldReason: text("localHoldReason"),
+    localHoldAt: timestamp("localHoldAt"),
+    localHoldBy: int("localHoldBy"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -111,11 +115,12 @@ export const taskEvents = mysqlTable(
     nextState: varchar("nextState", { length: 80 }),
     summary: text("summary").notNull(),
     payloadDigest: varchar("payloadDigest", { length: 128 }),
+    providerActivityId: varchar("providerActivityId", { length: 160 }),
     metadata: text("metadata"),
     correlationId: varchar("correlationId", { length: 96 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [uniqueIndex("task_event_unique").on(table.eventId), index("task_event_task_idx").on(table.taskId, table.createdAt)],
+  table => [uniqueIndex("task_event_unique").on(table.eventId), uniqueIndex("task_event_activity_unique").on(table.taskId, table.providerActivityId), index("task_event_task_idx").on(table.taskId, table.createdAt)],
 );
 
 export const taskAttempts = mysqlTable(
@@ -167,6 +172,58 @@ export const taskApprovals = mysqlTable(
   },
   table => [index("approval_task_idx").on(table.taskId, table.createdAt)],
 );
+
+export const sessionControls = mysqlTable("session_controls", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  julesSessionName: varchar("julesSessionName", { length: 128 }),
+  controlType: mysqlEnum("controlType", ["refresh", "approve_plan", "send_message", "request_delete", "set_local_hold", "release_local_hold", "reconcile", "export_dossier"]).notNull(),
+  requestedBy: int("requestedBy").notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 160 }).notNull(),
+  inputDigest: varchar("inputDigest", { length: 128 }).notNull(),
+  reason: text("reason"),
+  preconditionSnapshot: text("preconditionSnapshot").notNull(),
+  status: mysqlEnum("status", ["pending", "succeeded", "failed", "timed_out", "unknown", "superseded"]).default("pending").notNull(),
+  providerRequestId: varchar("providerRequestId", { length: 128 }),
+  sentAt: timestamp("sentAt"),
+  completedAt: timestamp("completedAt"),
+  errorCode: varchar("errorCode", { length: 80 }),
+  errorMessage: varchar("errorMessage", { length: 500 }),
+  responseDigest: varchar("responseDigest", { length: 128 }),
+  stateBefore: varchar("stateBefore", { length: 80 }),
+  stateAfter: varchar("stateAfter", { length: 80 }),
+  eventId: varchar("eventId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("session_control_idempotency_unique").on(table.idempotencyKey), index("session_control_task_idx").on(table.taskId, table.createdAt)]);
+
+export const taskControlLeases = mysqlTable("task_control_leases", {
+  taskId: int("taskId").primaryKey(),
+  heldBy: int("heldBy").notNull(),
+  controlDigest: varchar("controlDigest", { length: 128 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const sessionMonitorCheckpoints = mysqlTable("session_monitor_checkpoints", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  julesSessionName: varchar("julesSessionName", { length: 128 }).notNull(),
+  lastActivityId: varchar("lastActivityId", { length: 160 }),
+  latestProviderUpdateTime: timestamp("latestProviderUpdateTime"),
+  observedState: varchar("observedState", { length: 80 }),
+  lastSuccessfulAt: timestamp("lastSuccessfulAt"),
+  lastAttemptAt: timestamp("lastAttemptAt"),
+  nextRecommendedPollAt: timestamp("nextRecommendedPollAt"),
+  errorStreak: int("errorStreak").default(0).notNull(),
+  lastError: varchar("lastError", { length: 500 }),
+  lastLatencyMs: int("lastLatencyMs"),
+  responseDigest: varchar("responseDigest", { length: 128 }),
+  monitorVersion: varchar("monitorVersion", { length: 40 }).default("session-monitor-v1").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("session_monitor_task_unique").on(table.taskId), index("session_monitor_session_idx").on(table.julesSessionName)]);
 
 export const qualityContracts = mysqlTable("quality_contracts", {
   id: int("id").autoincrement().primaryKey(),

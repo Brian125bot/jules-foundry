@@ -4,6 +4,8 @@ import {
   credentialProfiles,
   initiatives,
   InsertUser,
+  sessionControls,
+  sessionMonitorCheckpoints,
   taskApprovals,
   taskAttempts,
   taskEvidence,
@@ -71,13 +73,15 @@ export async function getTaskForUser(userId: number, taskId: number) {
 
 export async function getTaskTimeline(taskId: number) {
   const db = requireDb(await getDb());
-  const [events, attempts, evidence, approvals] = await Promise.all([
+  const [events, attempts, evidence, approvals, controls, checkpoint] = await Promise.all([
     db.select().from(taskEvents).where(eq(taskEvents.taskId, taskId)).orderBy(desc(taskEvents.createdAt)),
     db.select().from(taskAttempts).where(eq(taskAttempts.taskId, taskId)).orderBy(desc(taskAttempts.createdAt)),
     db.select().from(taskEvidence).where(eq(taskEvidence.taskId, taskId)).orderBy(desc(taskEvidence.createdAt)),
     db.select().from(taskApprovals).where(eq(taskApprovals.taskId, taskId)).orderBy(desc(taskApprovals.createdAt)),
+    db.select().from(sessionControls).where(eq(sessionControls.taskId, taskId)).orderBy(desc(sessionControls.createdAt)),
+    db.select().from(sessionMonitorCheckpoints).where(eq(sessionMonitorCheckpoints.taskId, taskId)).limit(1),
   ]);
-  return { events, attempts, evidence, approvals };
+  return { events, attempts, evidence, approvals, controls, checkpoint: checkpoint[0] ?? null };
 }
 
 export async function getTaskEventsByTaskIds(taskIds: number[]) {

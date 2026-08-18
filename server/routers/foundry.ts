@@ -2,11 +2,12 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { credentialProfiles, initiatives, qualityContracts, qualityPrompts, qualityRecoveries, qualityVerifications, taskApprovals, taskAttempts, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
+import { credentialProfiles, initiatives, qualityContracts, qualityPrompts, qualityRecoveries, qualityVerifications, sessionControls, sessionMonitorCheckpoints, taskApprovals, taskAttempts, taskControlLeases, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
 import { getCredentialById, getCredentialProfiles, getCredentialSecret, getDb, getInitiativeForUser, getTaskForUser, getTaskTimeline, requireDb } from "../db";
 import { digestPayload, decryptSecret, encryptSecret, maskSecret } from "../services/vault";
-import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, generateQualityContract, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
+import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, deleteJulesSession, findJulesSource, generateQualityContract, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
 import { buildDeterministicProofMap, buildProofCarryingPrompt, canDispatchWithQualityContract, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict, isQualityVerificationEligible } from "../services/quality";
+import { controlAvailability, controlPreconditionSnapshot, nextPollDelaySeconds, sessionControlKey, type SessionControlType } from "../services/session-control";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
@@ -89,13 +90,31 @@ async function requireReadySecret(user: number, provider: "jules" | "gemini" | "
   return decryptSecret(credential.encryptedSecret);
 }
 
-async function recordEvent(taskId: number, source: "local" | "jules" | "github" | "gemini", eventType: string, summary: string, metadata?: unknown, transition?: { previous?: string | null; next?: string | null }) {
+async function recordEvent(taskId: number, source: "local" | "jules" | "github" | "gemini", eventType: string, summary: string, metadata?: unknown, transition?: { previous?: string | null; next?: string | null }, providerActivityId?: string | null) {
   const db = requireDb(await getDb());
   await db.insert(taskEvents).values({
     eventId: nanoid(24), taskId, source, eventType, summary,
     previousState: transition?.previous ?? null, nextState: transition?.next ?? null,
-    payloadDigest: metadata ? digestPayload(metadata) : null, metadata: metadata ? JSON.stringify(metadata) : null, correlationId: nanoid(12),
+    payloadDigest: metadata ? digestPayload(metadata) : null, providerActivityId: providerActivityId ?? null, metadata: metadata ? JSON.stringify(metadata) : null, correlationId: nanoid(12),
   });
+}
+
+async function beginSessionControl(input: { taskId: number; sessionName?: string | null; type: SessionControlType; userId: number; payload: unknown; reason?: string; snapshot: unknown }) {
+  const db = requireDb(await getDb()); const inputDigest = digestPayload(input.payload); const idempotencyKey = sessionControlKey(input.taskId, input.type, input.payload);
+  const existing = (await db.select().from(sessionControls).where(eq(sessionControls.idempotencyKey, idempotencyKey)).limit(1))[0];
+  if (existing) return { control: existing, reused: true };
+  const lease = (await db.select().from(taskControlLeases).where(eq(taskControlLeases.taskId, input.taskId)).limit(1))[0];
+  if (lease && lease.expiresAt > new Date() && lease.controlDigest !== inputDigest) throw new TRPCError({ code: "CONFLICT", message: "Another session control is in flight for this task. Refresh the command ledger and retry after it completes." });
+  await db.insert(taskControlLeases).values({ taskId: input.taskId, heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000) }).onDuplicateKeyUpdate({ set: { heldBy: input.userId, controlDigest: inputDigest, expiresAt: new Date(Date.now() + 30_000) } });
+  const result = await db.insert(sessionControls).values({ taskId: input.taskId, julesSessionName: input.sessionName ?? null, controlType: input.type, requestedBy: input.userId, idempotencyKey, inputDigest, reason: input.reason ?? null, preconditionSnapshot: JSON.stringify(input.snapshot), status: "pending", stateBefore: (input.snapshot as { julesState?: string | null }).julesState ?? null, sentAt: new Date() });
+  return { control: { id: Number(result[0].insertId), idempotencyKey }, reused: false };
+}
+
+async function finishSessionControl(controlId: number, outcome: "succeeded" | "failed" | "timed_out" | "unknown", input: { stateAfter?: string | null; error?: string; response?: unknown; eventId?: string }) {
+  const db = requireDb(await getDb());
+  await db.update(sessionControls).set({ status: outcome, stateAfter: input.stateAfter ?? null, errorMessage: input.error?.slice(0, 500) ?? null, responseDigest: input.response ? digestPayload(input.response) : null, eventId: input.eventId ?? null, completedAt: new Date() }).where(eq(sessionControls.id, controlId));
+  const control = (await db.select().from(sessionControls).where(eq(sessionControls.id, controlId)).limit(1))[0];
+  if (control) await db.delete(taskControlLeases).where(and(eq(taskControlLeases.taskId, control.taskId), eq(taskControlLeases.controlDigest, control.inputDigest)));
 }
 
 async function createAttempt(taskId: number, type: "dispatch" | "poll" | "approval" | "message" | "verification", key: string) {
@@ -134,10 +153,14 @@ async function pollOne(user: number, taskId: number, bucket = Math.floor(Date.no
     const plan = response.activities.find((item: any) => item.planGenerated?.plan)?.planGenerated?.plan;
     const db = requireDb(await getDb());
     await db.update(tasks).set({ julesState: sessionState, state: nextState, health, lastPolledAt: new Date(), lastActivityAt: activityTime, prUrl, julesPlan: plan ? JSON.stringify(plan) : record.task.julesPlan, lastError: null }).where(eq(tasks.id, record.task.id));
+    const latency = Date.now() - started; const nextDelay = nextPollDelaySeconds(sessionState, 0);
+    await db.insert(sessionMonitorCheckpoints).values({ taskId: record.task.id, julesSessionName: record.task.julesSessionName, lastActivityId: activity?.id ?? null, latestProviderUpdateTime: response.session?.updateTime ? new Date(response.session.updateTime) : null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastLatencyMs: latency, responseDigest: digestPayload(response), monitorVersion: "session-monitor-v1" }).onDuplicateKeyUpdate({ set: { lastActivityId: activity?.id ?? null, observedState: sessionState, lastSuccessfulAt: new Date(), lastAttemptAt: new Date(), nextRecommendedPollAt: nextDelay ? new Date(Date.now() + nextDelay * 1000) : null, errorStreak: 0, lastLatencyMs: latency, responseDigest: digestPayload(response) } });
     await recordEvent(record.task.id, "jules", "session_polled", `Jules reports ${sessionState}.`, { sessionState, activityCount: response.activities.length, prUrl }, { previous, next: sessionState });
     for (const item of response.activities.slice(-8)) {
       const type = item.planGenerated ? "plan_generated" : item.progressUpdated ? "progress_updated" : item.agentMessaged ? "agent_messaged" : item.sessionCompleted ? "session_completed" : item.sessionFailed ? "session_failed" : "activity";
-      await recordEvent(record.task.id, "jules", type, item.description || type.replaceAll("_", " "), { activityId: item.id, type, artifacts: item.artifacts?.length ?? 0 });
+      const duplicate = item.id ? (await db.select().from(taskEvents).where(and(eq(taskEvents.taskId, record.task.id), eq(taskEvents.providerActivityId, item.id))).limit(1))[0] : null;
+      if (duplicate) continue;
+      await recordEvent(record.task.id, "jules", type, item.description || type.replaceAll("_", " "), { activityId: item.id, type, artifacts: item.artifacts?.length ?? 0 }, undefined, item.id ?? null);
       for (const [artifactIndex, artifact] of (item.artifacts ?? []).entries()) {
         const artifactType = artifact.changeSet ? "change_set" : artifact.bashOutput ? "bash_output" : artifact.media ? "media" : "artifact";
         const artifactSummary = artifact.bashOutput?.command ? `Captured bash output for ${artifact.bashOutput.command}.` : artifact.changeSet?.gitPatch?.suggestedCommitMessage ? `Captured change set: ${artifact.changeSet.gitPatch.suggestedCommitMessage}` : `Captured ${artifactType} artifact.`;
@@ -359,6 +382,39 @@ export const foundryRouter = router({
         await finishAttempt(attempt.attempt.id, "failure", started, { message }, "validation or provider request failed");
         throw new TRPCError({ code: "BAD_REQUEST", message });
       }
+    }),
+  }),
+  session: router({
+    deck: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const record = await getTaskForUser(userId(ctx), input.taskId); if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      const timeline = await getTaskTimeline(record.task.id);
+      return { availability: controlAvailability({ julesState: record.task.julesState, localHold: record.task.localHold, hasSession: Boolean(record.task.julesSessionName) }), localHold: Boolean(record.task.localHold), localHoldReason: record.task.localHoldReason, controls: timeline.controls, checkpoint: timeline.checkpoint };
+    }),
+    command: protectedProcedure.input(z.object({ taskId: z.number().int().positive(), type: z.enum(["refresh", "approve_plan", "send_message", "request_delete", "set_local_hold", "release_local_hold", "reconcile", "export_dossier"]), reason: z.string().max(1500).optional(), message: z.string().max(3000).optional(), confirmation: z.string().max(180).optional() })).mutation(async ({ ctx, input }) => {
+      const user = userId(ctx); const db = requireDb(await getDb()); const record = await getTaskForUser(user, input.taskId); if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      const availability = controlAvailability({ julesState: record.task.julesState, localHold: record.task.localHold, hasSession: Boolean(record.task.julesSessionName) });
+      const snapshot = controlPreconditionSnapshot({ julesState: record.task.julesState, localHold: record.task.localHold, sessionName: record.task.julesSessionName, julesPlan: record.task.julesPlan });
+      if ((input.type === "approve_plan" && !availability.canApprovePlan) || (input.type === "send_message" && !availability.canSendMessage) || (input.type === "set_local_hold" && !availability.canSetLocalHold) || (input.type === "release_local_hold" && !availability.canReleaseLocalHold) || ((input.type === "refresh" || input.type === "reconcile") && !availability.canReconcile)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Control '${input.type}' is unavailable while Jules reports ${availability.state}.` });
+      if (input.type === "request_delete" && input.confirmation !== record.task.julesSessionName) throw new TRPCError({ code: "BAD_REQUEST", message: "Type the exact Jules session name to confirm a provider deletion request." });
+      const begun = await beginSessionControl({ taskId: record.task.id, sessionName: record.task.julesSessionName, type: input.type as SessionControlType, userId: user, payload: { reason: input.reason ?? "", message: input.message ?? "", confirmation: input.confirmation ?? "" }, reason: input.reason, snapshot });
+      if (begun.reused) return { reused: true, control: begun.control };
+      try {
+        if (input.type === "set_local_hold" || input.type === "release_local_hold") {
+          const hold = input.type === "set_local_hold"; await db.update(tasks).set({ localHold: hold ? 1 : 0, localHoldReason: hold ? input.reason ?? "Operator hold" : null, localHoldAt: hold ? new Date() : null, localHoldBy: hold ? user : null }).where(eq(tasks.id, record.task.id));
+          await recordEvent(record.task.id, "local", hold ? "local_hold_set" : "local_hold_released", hold ? "Operator set a Foundry-only hold; Jules was not paused." : "Operator released the Foundry-only hold.", { reason: input.reason ?? null });
+        } else if (input.type === "refresh" || input.type === "reconcile") await pollOne(user, record.task.id);
+        else if (input.type === "export_dossier") { /* audit-only control; dossier query performs the export */ }
+        else {
+          if (!record.task.julesSessionName) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No Jules session is available for this provider control." });
+          const secret = await requireReadySecret(user, "jules");
+          if (input.type === "approve_plan") await approveJulesPlan(secret, record.task.julesSessionName);
+          if (input.type === "send_message") { if (!input.message?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "A message is required." }); await messageJulesSession(secret, record.task.julesSessionName, input.message); }
+          if (input.type === "request_delete") { const fresh = await pollJulesSession(secret, record.task.julesSessionName); if ((fresh.session?.state ?? record.task.julesState) !== record.task.julesState) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Provider state changed during delete confirmation; refresh and confirm again." }); await deleteJulesSession(secret, record.task.julesSessionName); }
+          await recordEvent(record.task.id, "local", `session_${input.type}`, `Operator requested '${input.type}' against Jules.`, { reason: input.reason ?? null, messageDigest: input.message ? digestPayload(input.message) : null });
+        }
+        await finishSessionControl(begun.control.id, "succeeded", { stateAfter: record.task.julesState });
+        return { reused: false, success: true };
+      } catch (error) { const message = error instanceof Error ? error.message : "Session control failed"; await finishSessionControl(begun.control.id, "failed", { stateAfter: record.task.julesState, error: message }); throw error; }
     }),
   }),
   plans: router({

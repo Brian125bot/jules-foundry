@@ -73,3 +73,12 @@
 - [x] Add explicit Quality Mesh query-failure states and an evidence-requirement regression for terminal verification.
 - [x] Add code-level regression coverage for Quality Mesh contract, prompt, verification, recovery, and closeout orchestration rules.
 - [x] Verify the Quality Mesh test additions with TypeScript and the complete Vitest suite.
+- [ ] Add durable session-control and monitor-checkpoint persistence with action, lease, state, and payload-digest governance.
+- [ ] Implement state-aware, idempotent session commands for refresh, message, plan approval, local hold, release, reconcile, and guarded provider deletion.
+- [ ] Deduplicate Jules activities with a restart-safe monitor cursor and surface freshness, error streak, and recommended poll timing.
+- [ ] Build the Session Command Deck, command audit ledger, local-hold control, destructive confirmation, and timeline filters in mission detail.
+- [ ] Add regression coverage for command state rules, idempotency, local holds, monitoring checkpoints, and destructive-control safeguards.
+- [ ] Record monitoring deployment boundaries and validate granular controls through TypeScript, Vitest, and desktop visual review.
+- [x] Complete adaptive checkpoint updates, provider-activity deduplication, and lease enforcement in the live reconciliation path.
+- [ ] Finish granular command dialogs and regression coverage for safe, governance, and destructive session controls.
+- [ ] Complete the resumed final granular-control hardening, validation, and checkpoint pass.
