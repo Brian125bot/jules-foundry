@@ -17,4 +17,4 @@
 - [ ] Run protected-CI signed desktop builds, code-signing/notarization validation, installer smoke tests, updater tamper rejection, and live-provider contract tests using organization-owned credentials and disposable resources.
 - [x] Synchronize the canonical project with the latest GitHub state and reconcile documentation changes.
 - [x] Update production-readiness documentation with current implementation status and GitHub publication details.
-- [ ] Save and push the reconciled project checkpoint to GitHub.
+- [x] Save and push the reconciled project checkpoint to GitHub.
