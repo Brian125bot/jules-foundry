@@ -96,4 +96,4 @@
 - [ ] Open the About and How to Use popup from an authenticated dashboard session and visually verify its full content and containment at desktop width.
 - [ ] Open the About and How to Use popup from an authenticated dashboard session and visually verify its full content and containment at mobile width.
 - [ ] Interactively verify About-popup dismissal behavior from an authenticated dashboard session, then record the result.
-- [ ] Commit and publish the completed About and How to Use popup implementation and regression coverage to GitHub main.
+- [x] Commit and publish the completed About and How to Use popup implementation and regression coverage to GitHub main.
