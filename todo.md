@@ -108,7 +108,7 @@
 - [x] Expand regression coverage for local-instance security, SQLite data invariants, local vault and storage boundaries, monitor recovery, and backup or restore behavior.
 - [x] Update installation, operations, migration, and security documentation for the trusted-machine local-first edition.
 - [x] Run full static, unit, integration, migration, and production-build release gates for the local-first edition.
-- [ ] Commit, checkpoint, and publish the verified trusted-machine local-first implementation to GitHub main.
+- [x] Commit, checkpoint, and publish the verified trusted-machine local-first implementation to GitHub main.
 - [ ] Run and record an end-to-end local bootstrap validation that reaches the seeded local operator dashboard through the one-time loopback session flow.
 - [x] Audit the repository for active hosted analytics, runtime environment, and platform dependencies, then remove or document any remaining non-runtime references.
 - [x] Add and run restart-based monitor-checkpoint recovery and restore-path verification coverage for the local SQLite runtime.
