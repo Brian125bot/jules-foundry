@@ -1,35 +1,28 @@
 import crypto from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { ensureLocalDirectories, LOCAL_DATA_DIR } from "../local-runtime";
+import { getLegacyPassphraseKey, getVaultKeyMaterial } from "./vault-key-provider";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
 
-function vaultKey() {
-  const passphrase = process.env.FOUNDRY_VAULT_PASSPHRASE || (process.env.NODE_ENV === "test" ? "jules-foundry-test-vault-passphrase" : "");
-  if (!passphrase) throw new Error("Credential vault is locked. Start Jules Foundry with FOUNDRY_VAULT_PASSPHRASE set in the local process environment.");
-  ensureLocalDirectories();
-  const saltPath = join(LOCAL_DATA_DIR, "vault.salt");
-  const salt = existsSync(saltPath) ? readFileSync(saltPath) : crypto.randomBytes(16);
-  if (!existsSync(saltPath)) writeFileSync(saltPath, salt, { mode: 0o600 });
-  return crypto.scryptSync(passphrase, salt, 32, { N: 32_768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
-}
+const CURRENT_PREFIX = "jf-v2:";
+
+export function isCurrentVaultCiphertext(payload: string) { return payload.startsWith(CURRENT_PREFIX); }
 
 export function encryptSecret(secret: string) {
   const iv = crypto.randomBytes(IV_BYTES);
-  const cipher = crypto.createCipheriv(ALGORITHM, vaultKey(), iv);
+  const cipher = crypto.createCipheriv(ALGORITHM, getVaultKeyMaterial().key, iv);
   const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  return `${CURRENT_PREFIX}${Buffer.concat([iv, tag, encrypted]).toString("base64")}`;
 }
 
 export function decryptSecret(payload: string) {
-  const raw = Buffer.from(payload, "base64");
+  const current = isCurrentVaultCiphertext(payload);
+  const raw = Buffer.from(current ? payload.slice(CURRENT_PREFIX.length) : payload, "base64");
   const iv = raw.subarray(0, IV_BYTES);
   const tag = raw.subarray(IV_BYTES, IV_BYTES + 16);
   const encrypted = raw.subarray(IV_BYTES + 16);
-  const decipher = crypto.createDecipheriv(ALGORITHM, vaultKey(), iv);
+  const decipher = crypto.createDecipheriv(ALGORITHM, current ? getVaultKeyMaterial().key : getLegacyPassphraseKey(), iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }

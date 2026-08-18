@@ -35,4 +35,19 @@ describe("trusted-machine local runtime", () => {
     expect(shouldPollCheckpoint({ nextRecommendedPollAt: new Date("2026-08-18T17:59:59.000Z") }, now)).toBe(true);
     expect(shouldPollCheckpoint({ nextRecommendedPollAt: new Date("2026-08-18T18:00:01.000Z") }, now)).toBe(false);
   });
+
+  it("uses the desktop shell bootstrap capability when one is supplied", async () => {
+    const previous = process.env.FOUNDRY_DESKTOP_BOOTSTRAP_TOKEN;
+    process.env.FOUNDRY_DESKTOP_BOOTSTRAP_TOKEN = "desktop-shell-regression-capability";
+    vi.resetModules();
+    try {
+      const { localLaunchPath: launchPathFromFreshRuntime } = await import("./local-runtime");
+      const capability = new URL(`http://127.0.0.1:31415${launchPathFromFreshRuntime()}`).searchParams.get("bootstrap");
+      expect(capability).toBe("desktop-shell-regression-capability");
+    } finally {
+      if (previous === undefined) delete process.env.FOUNDRY_DESKTOP_BOOTSTRAP_TOKEN;
+      else process.env.FOUNDRY_DESKTOP_BOOTSTRAP_TOKEN = previous;
+      vi.resetModules();
+    }
+  });
 });

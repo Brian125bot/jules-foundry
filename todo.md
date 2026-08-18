@@ -109,10 +109,27 @@
 - [x] Update installation, operations, migration, and security documentation for the trusted-machine local-first edition.
 - [x] Run full static, unit, integration, migration, and production-build release gates for the local-first edition.
 - [x] Commit, checkpoint, and publish the verified trusted-machine local-first implementation to GitHub main.
-- [ ] Run and record an end-to-end local bootstrap validation that reaches the seeded local operator dashboard through the one-time loopback session flow.
+- [x] Run and record an end-to-end local bootstrap validation that reaches the seeded local operator dashboard through the one-time loopback session flow.
 - [x] Audit the repository for active hosted analytics, runtime environment, and platform dependencies, then remove or document any remaining non-runtime references.
 - [x] Add and run restart-based monitor-checkpoint recovery and restore-path verification coverage for the local SQLite runtime.
 - [x] Restore a backup into a fresh local SQLite runtime path and verify the seeded operator plus persisted mission records remain usable after reopen.
 - [x] Assess local-install readiness and document the remaining remediation required for dependable end-user operation.
 - [x] Document the verified local-install readiness assessment and remaining end-user distribution hardening work in the repository.
 - [x] Compose and document a staged production-readiness plan for polished trusted-machine local distribution.
+- [x] Implement a data-directory single-instance lock, startup preflight, graceful shutdown checkpointing, and redacted local diagnostics.
+- [x] Implement a vault key-provider abstraction with secure local key generation, passphrase recovery fallback, and safe ciphertext migration behavior.
+- [x] Build local-user onboarding, runtime settings, backup browsing, staged restore confirmation, and data-retention controls.
+- [x] Create a Tauri desktop-shell and Node-sidecar packaging foundation with restricted capabilities and update configuration.
+- [x] Add release engineering artifacts for reproducible builds, checksums, SBOM generation, signed-update metadata, and platform release workflow.
+- [x] Add end-to-end local lifecycle, recovery, security, bundle-budget, and clean-install regression coverage.
+- [x] Reduce the initial browser bundle through route-level code splitting and establish a local-user build-budget check.
+- [x] Update local-user installation, security, release, and support documentation for the implemented production features.
+- [ ] Run complete production release gates and publish the verified local-user production-ready implementation.
+- [x] Resolve packaged libSQL and keyring native-module loading so the desktop sidecar starts from bundled resources without development dependencies.
+- [x] Run and record a packaged-sidecar local startup smoke test with only its shipped resources available.
+- [x] Prove that the loopback bootstrap session loads seeded-operator API data, not only the static HTML shell.
+- [x] Add explicit graceful shutdown checkpointing and regression coverage for database and monitor state finalization.
+- [x] Run an automated bootstrap-to-render validation that proves an authenticated dashboard route loads operator-visible content after the one-time loopback exchange.
+- [x] Add a shutdown-path regression that starts the local runtime, triggers shutdown, and verifies both WAL checkpoint execution and monitor finalization behavior.
+- [x] Add a first-run local onboarding state and a destructive staged-restore confirmation dialog with regression coverage.
+- [x] Add clean-install and packaged OS-keychain sidecar startup coverage using only shipped resources.

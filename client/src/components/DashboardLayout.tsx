@@ -15,6 +15,7 @@ const menuItems = [
   { icon: Radar, label: "Fleet observatory", path: "/fleet" },
   { icon: Boxes, label: "Initiatives", path: "/initiatives" },
   { icon: KeyRound, label: "Credential vault", path: "/credentials" },
+  { icon: ShieldCheck, label: "Local operations", path: "/local" },
 ];
 const SIDEBAR_WIDTH_KEY = "jules-foundry-sidebar-width";
 const DEFAULT_WIDTH = 272;
