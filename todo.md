@@ -29,7 +29,7 @@
 - [x] Add an explicit per-attempt provider-spend field to the operations ledger alongside API-call counts and task budget.
 - [x] Populate per-attempt estimated spend with a documented provider-call estimate and verify its display in the task ledger.
 - [x] Add product-facing spend-estimate guidance and automated coverage for the provider-call estimation rule.
-- [ ] Validate populated ledger rows through a live provider-backed task after credentials are configured.
+- [x] Validate populated ledger rows through a live provider-backed task after credentials are configured.
 - [x] Add a distinct poll-history section plus per-attempt API-call and cost-facing fields to the task ledger.
 - [x] Save the final production-ready checkpoint after the expanded ledger and completion backlog are verified.
 - [x] Fix credential-vault create and rotate failures caused by database constraints, while preserving write-only secret handling.
@@ -73,12 +73,16 @@
 - [x] Add explicit Quality Mesh query-failure states and an evidence-requirement regression for terminal verification.
 - [x] Add code-level regression coverage for Quality Mesh contract, prompt, verification, recovery, and closeout orchestration rules.
 - [x] Verify the Quality Mesh test additions with TypeScript and the complete Vitest suite.
-- [ ] Add durable session-control and monitor-checkpoint persistence with action, lease, state, and payload-digest governance.
-- [ ] Implement state-aware, idempotent session commands for refresh, message, plan approval, local hold, release, reconcile, and guarded provider deletion.
-- [ ] Deduplicate Jules activities with a restart-safe monitor cursor and surface freshness, error streak, and recommended poll timing.
-- [ ] Build the Session Command Deck, command audit ledger, local-hold control, destructive confirmation, and timeline filters in mission detail.
-- [ ] Add regression coverage for command state rules, idempotency, local holds, monitoring checkpoints, and destructive-control safeguards.
-- [ ] Record monitoring deployment boundaries and validate granular controls through TypeScript, Vitest, and desktop visual review.
+- [x] Add durable session-control and monitor-checkpoint persistence with action, lease, state, and payload-digest governance.
+- [x] Implement state-aware, idempotent session commands for refresh, message, plan approval, local hold, release, reconcile, and guarded provider deletion.
+- [x] Deduplicate Jules activities with a restart-safe monitor cursor and surface freshness, error streak, and recommended poll timing.
+- [x] Build the Session Command Deck, command audit ledger, local-hold control, destructive confirmation, and timeline filters in mission detail.
+- [x] Add regression coverage for command state rules, idempotency, local holds, monitoring checkpoints, and destructive-control safeguards.
+- [x] Record monitoring deployment boundaries and validate granular controls through TypeScript, Vitest, and desktop visual review.
 - [x] Complete adaptive checkpoint updates, provider-activity deduplication, and lease enforcement in the live reconciliation path.
-- [ ] Finish granular command dialogs and regression coverage for safe, governance, and destructive session controls.
-- [ ] Complete the resumed final granular-control hardening, validation, and checkpoint pass.
+- [x] Finish granular command dialogs and regression coverage for safe, governance, and destructive session controls.
+- [x] Complete the resumed final granular-control hardening, validation, and checkpoint pass.
+- [ ] Define and document a production test matrix covering domain, persistence, provider, router, UI, and build layers.
+- [ ] Add deep regression coverage for orchestration state, quality gates, session-control monitoring, and destructive safeguards.
+- [ ] Add provider-boundary and desktop control-plane coverage for critical operational workflows.
+- [ ] Run and record complete static, test, and production-build verification for the expanded suite.
