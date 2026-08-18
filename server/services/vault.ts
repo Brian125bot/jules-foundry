@@ -1,12 +1,19 @@
 import crypto from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { ensureLocalDirectories, LOCAL_DATA_DIR } from "../local-runtime";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
 
 function vaultKey() {
-  const source = process.env.JWT_SECRET;
-  if (!source) throw new Error("Credential vault is unavailable because the server secret is missing.");
-  return crypto.createHash("sha256").update(source).digest();
+  const passphrase = process.env.FOUNDRY_VAULT_PASSPHRASE || (process.env.NODE_ENV === "test" ? "jules-foundry-test-vault-passphrase" : "");
+  if (!passphrase) throw new Error("Credential vault is locked. Start Jules Foundry with FOUNDRY_VAULT_PASSPHRASE set in the local process environment.");
+  ensureLocalDirectories();
+  const saltPath = join(LOCAL_DATA_DIR, "vault.salt");
+  const salt = existsSync(saltPath) ? readFileSync(saltPath) : crypto.randomBytes(16);
+  if (!existsSync(saltPath)) writeFileSync(saltPath, salt, { mode: 0o600 });
+  return crypto.scryptSync(passphrase, salt, 32, { N: 32_768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
 }
 
 export function encryptSecret(secret: string) {

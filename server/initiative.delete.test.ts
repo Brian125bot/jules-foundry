@@ -25,8 +25,8 @@ describe("initiative deletion", () => {
   it("deletes a confirmed inactive initiative and its Foundry records", async () => {
     const db = await getDb(); if (!db) return;
     const title = "Delete inactive initiative";
-    const initiativeId = Number((await db.insert(initiatives).values({ userId: testUserId, title, prompt: "Delete test initiative", repository: "owner/repository", branch: "main", budgetCents: 100 }))[0].insertId);
-    const taskId = Number((await db.insert(tasks).values({ initiativeId, taskKey: "delete-inactive", title: "Inactive task", description: "A task that can be safely removed.", riskTier: "green", allowedPaths: "[\"README.md\"]", nonGoals: "[\"No changes\"]", acceptanceCriteria: "[]", dependencies: "[]", idempotencyKey: "delete-inactive-key" }))[0].insertId);
+    const initiativeId = Number((await db.insert(initiatives).values({ userId: testUserId, title, prompt: "Delete test initiative", repository: "owner/repository", branch: "main", budgetCents: 100 })).lastInsertRowid);
+    const taskId = Number((await db.insert(tasks).values({ initiativeId, taskKey: "delete-inactive", title: "Inactive task", description: "A task that can be safely removed.", riskTier: "green", allowedPaths: "[\"README.md\"]", nonGoals: "[\"No changes\"]", acceptanceCriteria: "[]", dependencies: "[]", idempotencyKey: "delete-inactive-key" })).lastInsertRowid);
     await db.insert(taskEvents).values({ eventId: "delete-inactive-event", taskId, source: "local", eventType: "created", summary: "Created for deletion test." });
     const caller = appRouter.createCaller(context());
     await expect(caller.foundry.initiatives.deletePreview({ initiativeId })).resolves.toMatchObject({ taskCount: 1, canDelete: true });
@@ -39,7 +39,7 @@ describe("initiative deletion", () => {
   it("refuses deletion while a Jules session is active", async () => {
     const db = await getDb(); if (!db) return;
     const title = "Protect active initiative";
-    const initiativeId = Number((await db.insert(initiatives).values({ userId: testUserId, title, prompt: "Protect test initiative", repository: "owner/repository", branch: "main", budgetCents: 100 }))[0].insertId);
+    const initiativeId = Number((await db.insert(initiatives).values({ userId: testUserId, title, prompt: "Protect test initiative", repository: "owner/repository", branch: "main", budgetCents: 100 })).lastInsertRowid);
     await db.insert(tasks).values({ initiativeId, taskKey: "active-delete-block", title: "Active task", description: "An active Jules task cannot be deleted.", riskTier: "green", allowedPaths: "[\"README.md\"]", nonGoals: "[\"No changes\"]", acceptanceCriteria: "[]", dependencies: "[]", idempotencyKey: "active-delete-block-key", state: "executing", julesSessionName: "sessions/active-delete-block" });
     const caller = appRouter.createCaller(context());
     await expect(caller.foundry.initiatives.remove({ initiativeId, confirmation: title })).rejects.toThrow(/Jules session.*active/i);
