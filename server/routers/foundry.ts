@@ -2,10 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { credentialProfiles, initiatives, taskApprovals, taskAttempts, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
+import { credentialProfiles, initiatives, qualityContracts, qualityPrompts, qualityRecoveries, qualityVerifications, taskApprovals, taskAttempts, taskEvidence, taskEvents, tasks } from "../../drizzle/schema";
 import { getCredentialById, getCredentialProfiles, getCredentialSecret, getDb, getInitiativeForUser, getTaskForUser, getTaskTimeline, requireDb } from "../db";
 import { digestPayload, decryptSecret, encryptSecret, maskSecret } from "../services/vault";
-import { approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, messageJulesSession, pollJulesSession, requiresScopeReview, testCredential, validateGitHubBranch } from "../services/providers";
+import { analyzeQualityRecovery, approveJulesPlan, compileWithGemini, createJulesSession, findJulesSource, generateQualityContract, messageJulesSession, pollJulesSession, requiresScopeReview, runAdversarialQualityReview, testCredential, validateGitHubBranch } from "../services/providers";
+import { buildDeterministicProofMap, buildProofCarryingPrompt, classifyRecovery, deriveInitiativeQualityVerdict, deriveQualityVerdict } from "../services/quality";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const credentialInput = z.object({ provider: z.enum(["jules", "gemini", "github"]), label: z.string().trim().min(2).max(120), secret: z.string().trim().min(8).max(4000) });
@@ -332,7 +333,17 @@ export const foundryRouter = router({
         if (!branchCheck.ok) throw new Error(branchCheck.message);
         const source = await findJulesSource(julesSecret, record.initiative.repository, record.initiative.branch);
         if (!source.ok) throw new Error(source.message);
-        const packet = `Task: ${record.task.title}\n\nGoal: ${record.task.description}\n\nAllowed paths: ${record.task.allowedPaths}\n\nNon-goals: ${record.task.nonGoals}\n\nAcceptance criteria: ${record.task.acceptanceCriteria}\n\nStay within scope. Report ambiguity instead of expanding scope.`;
+        const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
+        if (contract && contract.decision !== "approved") throw new Error(`Quality contract v${contract.version} requires an operator decision before dispatch.`);
+        const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
+        const draftPacket = buildProofCarryingPrompt({ title: record.task.title, description: record.task.description, allowedPaths, nonGoals: parseList(record.task.nonGoals), acceptanceCriteria: criteria });
+        const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", allowedPaths, nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
+        const promptDigest = digestPayload({ promptText: draftPacket, twin });
+        const existingPrompt = (await db.select().from(qualityPrompts).where(eq(qualityPrompts.promptDigest, promptDigest)).limit(1))[0];
+        const prompt = existingPrompt ?? (() => null)();
+        const packet = prompt?.promptText ?? draftPacket;
+        if (!prompt) await db.insert(qualityPrompts).values({ taskId: record.task.id, contractId: contract?.id ?? null, templateVersion: "proof-prompt-v1", promptDigest, promptText: packet, twinJson: JSON.stringify(twin) });
+        await recordEvent(record.task.id, "local", "quality_prompt_bound", "Bound a versioned proof-carrying prompt to the operator-confirmed dispatch.", { promptDigest, contractId: contract?.id ?? null, reused: Boolean(prompt) });
         const session = await createJulesSession(julesSecret, { prompt: packet, title: record.task.title, sourceName: source.sourceName, branch: record.initiative.branch, requirePlanApproval: input.requirePlanApproval, autoCreatePr: input.autoCreatePr });
         sessionCreated = true;
         await db.update(tasks).set({ state: "dispatched", health: "healthy", requirePlanApproval: input.requirePlanApproval ? 1 : 0, autoCreatePr: input.autoCreatePr ? 1 : 0, julesSessionName: session.name, julesSessionId: session.id, julesSessionUrl: session.url, julesState: session.state ?? "QUEUED", lastPolledAt: new Date() }).where(eq(tasks.id, record.task.id));
@@ -370,6 +381,105 @@ export const foundryRouter = router({
       await db.update(tasks).set({ health: input.action === "rejected" ? "attention" : "healthy", state: input.action === "approved" ? "executing" : "plan_gate" }).where(eq(tasks.id, record.task.id));
       await recordEvent(record.task.id, "local", `plan_${input.action}`, input.action === "approved" ? "Plan approved and execution released." : input.action === "rejected" ? "Plan rejection and reviewer feedback sent to Jules." : "Corrective message sent to Jules.", { message: input.message ?? null });
       return { success: true };
+    }),
+  }),
+  quality: router({
+    generateContract: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const user = userId(ctx);
+      const initiative = await getInitiativeForUser(user, input.initiativeId);
+      if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
+      const secret = await requireReadySecret(user, "gemini");
+      const { contract, critic } = await generateQualityContract(secret, initiative);
+      const prior = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
+      const decision = critic.recommendation === "human_review_required" ? "human_review" as const : critic.recommendation === "revise_before_dispatch" ? "revise" as const : "draft" as const;
+      const result = await db.insert(qualityContracts).values({ initiativeId: initiative.id, version: (prior?.version ?? 0) + 1, outcome: contract.outcome, contractJson: JSON.stringify(contract), criticJson: JSON.stringify(critic), ambiguityScore: critic.ambiguityScore, decision });
+      const contractId = Number(result[0].insertId);
+      const initiativeTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
+      await Promise.all(initiativeTasks.map(task => recordEvent(task.id, "gemini", "quality_contract_generated", "Generated a bounded delivery contract and independent critique for operator review.", { contractId, version: (prior?.version ?? 0) + 1, ambiguityScore: critic.ambiguityScore, recommendation: critic.recommendation })));
+      return { id: contractId, version: (prior?.version ?? 0) + 1, decision, contract, critic };
+    }),
+    decideContract: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive(), contractId: z.number().int().positive(), decision: z.enum(["approved", "revise", "human_review"]) })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const initiative = await getInitiativeForUser(userId(ctx), input.initiativeId);
+      if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
+      const contract = (await db.select().from(qualityContracts).where(and(eq(qualityContracts.id, input.contractId), eq(qualityContracts.initiativeId, initiative.id))).limit(1))[0];
+      if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Quality contract not found for this initiative." });
+      await db.update(qualityContracts).set({ decision: input.decision }).where(eq(qualityContracts.id, contract.id));
+      const initiativeTasks = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
+      await Promise.all(initiativeTasks.map(task => recordEvent(task.id, "local", "quality_contract_decision", `Operator marked quality contract v${contract.version} as ${input.decision}.`, { contractId: contract.id, decision: input.decision })));
+      return { success: true };
+    }),
+    compilePrompt: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const record = await getTaskForUser(userId(ctx), input.taskId);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
+      const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
+      const promptText = buildProofCarryingPrompt({ title: record.task.title, description: record.task.description, allowedPaths: parseList(record.task.allowedPaths), nonGoals: parseList(record.task.nonGoals), acceptanceCriteria: criteria });
+      const twin = { taskKey: record.task.taskKey, contractId: contract?.id ?? null, contractDecision: contract?.decision ?? "absent", allowedPaths: parseList(record.task.allowedPaths), nonGoals: parseList(record.task.nonGoals), criteria, createdForOperatorConfirmedDispatch: true };
+      const promptDigest = digestPayload({ promptText, twin });
+      const existing = (await db.select().from(qualityPrompts).where(eq(qualityPrompts.promptDigest, promptDigest)).limit(1))[0];
+      if (existing) return { ...existing, reused: true };
+      const result = await db.insert(qualityPrompts).values({ taskId: record.task.id, contractId: contract?.id ?? null, templateVersion: "proof-prompt-v1", promptDigest, promptText, twinJson: JSON.stringify(twin) });
+      const prompt = { id: Number(result[0].insertId), taskId: record.task.id, promptDigest, promptText, templateVersion: "proof-prompt-v1", contractId: contract?.id ?? null, twinJson: JSON.stringify(twin), reused: false };
+      await recordEvent(record.task.id, "local", "quality_prompt_compiled", "Compiled a versioned proof-carrying prompt for operator-confirmed dispatch.", { promptDigest, contractId: contract?.id ?? null });
+      return prompt;
+    }),
+    runVerification: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const user = userId(ctx); const record = await getTaskForUser(user, input.taskId);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!terminalJulesStates.has(record.task.julesState ?? "") && record.task.state !== "review_ready") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Quality verification is available only after a terminal Jules session." });
+      const timeline = await getTaskTimeline(record.task.id); const criteria = parseList(record.task.acceptanceCriteria) as Array<{ id: string; text: string }>;
+      const proofMap = buildDeterministicProofMap({ criteria, evidence: timeline.evidence });
+      const deterministicPassed = !proofMap.some(item => item.status === "contradicted");
+      const verificationKey = `quality-verification:${record.task.id}:${digestPayload({ proofMap, session: record.task.julesState })}`;
+      const attempt = await createAttempt(record.task.id, "verification", verificationKey);
+      if (attempt.reused) { const prior = (await db.select().from(qualityVerifications).where(eq(qualityVerifications.taskId, record.task.id)).orderBy(desc(qualityVerifications.createdAt)).limit(1))[0]; if (prior) return { ...prior, reused: true }; }
+      const started = Date.now(); let adversarial: unknown = null; let providerFailed = false;
+      try { const secret = await requireReadySecret(user, "gemini"); adversarial = await runAdversarialQualityReview(secret, { taskTitle: record.task.title, taskDescription: record.task.description, criteria: proofMap.map(item => ({ id: item.id, text: item.text, deterministicStatus: item.status })), evidence: timeline.evidence.map(item => ({ criterionId: item.criterionId, status: item.status, label: item.label, reference: item.reference, detail: item.detail })) }); }
+      catch (error) { providerFailed = true; adversarial = { materialFinding: false, summary: error instanceof Error ? error.message.slice(0, 500) : "Gemini review unavailable", criterionFindings: [], operatorQuestions: ["Re-run the bounded adversarial review after the Gemini credential or service is available."] }; }
+      const adversarialMaterialFinding = Boolean((adversarial as { materialFinding?: boolean }).materialFinding);
+      const verdict = deriveQualityVerdict({ providerFailed, deterministicPassed, criteria: proofMap, adversarialMaterialFinding });
+      const summary = providerFailed ? "Deterministic proof map completed; bounded Gemini review was unavailable." : `Deterministic proof map completed with ${verdict.replaceAll("_", " ")} verdict.`;
+      const result = await db.insert(qualityVerifications).values({ taskId: record.task.id, verdict, deterministicJson: JSON.stringify({ deterministicPassed, proofMap }), evidenceJson: JSON.stringify(timeline.evidence), adversarialJson: JSON.stringify(adversarial), summary });
+      await recordEvent(record.task.id, "local", "quality_verification_completed", summary, { verificationId: Number(result[0].insertId), verdict, deterministicPassed, providerFailed });
+      await finishAttempt(attempt.attempt.id, providerFailed ? "failure" : "success", started, { verdict, deterministicPassed, providerFailed }, providerFailed ? "bounded Gemini review unavailable" : undefined);
+      return { id: Number(result[0].insertId), verdict, deterministic: { deterministicPassed, proofMap }, adversarial, reused: false };
+    }),
+    runRecovery: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const user = userId(ctx); const record = await getTaskForUser(user, input.taskId);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      const verification = (await db.select().from(qualityVerifications).where(eq(qualityVerifications.taskId, record.task.id)).orderBy(desc(qualityVerifications.createdAt)).limit(1))[0];
+      const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0];
+      const deterministic = verification ? parseList(verification.deterministicJson) as { deterministicPassed?: boolean } : {};
+      const recovery = classifyRecovery({ providerFailed: verification?.verdict === "provider_failed", deterministicPassed: deterministic.deterministicPassed ?? false, outOfScope: requiresScopeReview(parseList(record.task.allowedPaths)), ambiguityScore: contract?.ambiguityScore, failureText: record.task.lastError ?? verification?.summary ?? "" });
+      let advisor: unknown = null;
+      try { const secret = await requireReadySecret(user, "gemini"); advisor = await analyzeQualityRecovery(secret, { taskTitle: record.task.title, failureDomain: recovery.domain, deterministicRecommendation: recovery.recommendation, failureText: record.task.lastError ?? verification?.summary, deterministicFacts: { verdict: verification?.verdict ?? null, deterministic, ambiguityScore: contract?.ambiguityScore ?? 0, allowedPaths: parseList(record.task.allowedPaths) } }); }
+      catch (error) { advisor = { unavailable: true, message: error instanceof Error ? error.message.slice(0, 300) : "Bounded recovery adviser unavailable" }; }
+      const advisorText = (advisor as { failureNarrative?: string }).failureNarrative;
+      const recommendation = advisorText ? `${recovery.recommendation}\n\nBounded adviser note: ${advisorText}` : recovery.recommendation;
+      const result = await db.insert(qualityRecoveries).values({ taskId: record.task.id, domain: recovery.domain, recommendation, autoRetryEligible: recovery.autoRetryEligible });
+      await recordEvent(record.task.id, "local", "quality_recovery_classified", "Classified a recovery recommendation; no redispatch was created.", { recoveryId: Number(result[0].insertId), ...recovery, advisor });
+      return { id: Number(result[0].insertId), ...recovery, recommendation, advisor };
+    }),
+    getTaskQuality: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const record = await getTaskForUser(userId(ctx), input.taskId); if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      const [contract, prompt, verification, recovery] = await Promise.all([
+        db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, record.initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1),
+        db.select().from(qualityPrompts).where(eq(qualityPrompts.taskId, record.task.id)).orderBy(desc(qualityPrompts.createdAt)).limit(1),
+        db.select().from(qualityVerifications).where(eq(qualityVerifications.taskId, record.task.id)).orderBy(desc(qualityVerifications.createdAt)).limit(1),
+        db.select().from(qualityRecoveries).where(eq(qualityRecoveries.taskId, record.task.id)).orderBy(desc(qualityRecoveries.createdAt)).limit(1),
+      ]);
+      return { contract: contract[0] ?? null, prompt: prompt[0] ?? null, verification: verification[0] ?? null, recovery: recovery[0] ?? null };
+    }),
+    getInitiativeQuality: protectedProcedure.input(z.object({ initiativeId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = requireDb(await getDb()); const initiative = await getInitiativeForUser(userId(ctx), input.initiativeId); if (!initiative) throw new TRPCError({ code: "NOT_FOUND" });
+      const initiativeTasks = await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(eq(tasks.initiativeId, initiative.id));
+      const verifications = initiativeTasks.length ? await db.select().from(qualityVerifications).where(inArray(qualityVerifications.taskId, initiativeTasks.map(task => task.id))).orderBy(desc(qualityVerifications.createdAt)) : [];
+      const contract = (await db.select().from(qualityContracts).where(eq(qualityContracts.initiativeId, initiative.id)).orderBy(desc(qualityContracts.createdAt)).limit(1))[0] ?? null;
+      const latest = new Map<number, typeof verifications[number]>(); for (const verification of verifications) if (!latest.has(verification.taskId)) latest.set(verification.taskId, verification);
+      const taskVerdicts = initiativeTasks.map(task => ({ ...task, verification: latest.get(task.id) ?? null }));
+      const values = taskVerdicts.map(task => task.verification?.verdict);
+      const verdict = deriveInitiativeQualityVerdict({ taskCount: taskVerdicts.length, verdicts: values });
+      return { initiative: { id: initiative.id, title: initiative.title }, verdict, contract, taskVerdicts, unverifiedTaskCount: taskVerdicts.filter(task => !task.verification).length };
     }),
   }),
   evidence: router({

@@ -35,6 +35,9 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("initiatives.compile.useMutation");
     expect(source).toContain("initiatives.remove.useMutation");
     expect(source).toContain("Open mission");
+    expect(source).toContain("Initiative Quality Gate");
+    expect(source).toContain("quality.generateContract.useMutation");
+    expect(source).toContain("quality.decideContract.useMutation");
   });
 
   it("retains task dispatch, polling, evidence, and plan-action controls", async () => {
@@ -44,5 +47,9 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("plans.action.useMutation");
     expect(source).toContain("evidence.verify.useMutation");
     expect(source).toContain("Link evidence");
+    expect(source).toContain("Quality Mesh");
+    expect(source).toContain("quality.compilePrompt.useMutation");
+    expect(source).toContain("quality.runVerification.useMutation");
+    expect(source).toContain("quality.runRecovery.useMutation");
   });
 });

@@ -61,8 +61,13 @@
 - [x] Validate desktop layouts, interaction affordances, and regression coverage without removing existing functionality.
 - [x] Add and run desktop control-smoke coverage for retained workspace actions, then record the interactive-layout validation findings.
 - [x] Compose an LLM-assisted automation plan for Jules task planning, prompt construction, completion/failure analysis, and end-to-end correctness verification.
-- [ ] Add Quality Mesh persistence for contracts, prompts, task twins, verification runs, criterion verdicts, and recovery analysis.
-- [ ] Implement guarded Gemini planning, contract critique, prompt compilation, completion verification, and failure-recovery services.
-- [ ] Add Quality Mesh APIs and quality-gate actions that preserve deterministic checks and operator approval boundaries.
-- [ ] Build desktop Quality Mesh workspaces for contract review, prompt provenance, proof maps, task verdicts, and initiative closeout.
-- [ ] Add regression coverage for quality verdict roll-up, evidence requirements, prompt versioning, and recovery classification.
+- [x] Add Quality Mesh persistence for contracts, prompts, task twins, verification runs, criterion verdicts, and recovery analysis.
+- [x] Implement guarded Gemini planning, contract critique, prompt compilation, completion verification, and failure-recovery services.
+- [x] Add Quality Mesh APIs and quality-gate actions that preserve deterministic checks and operator approval boundaries.
+- [x] Build desktop Quality Mesh workspaces for contract review, prompt provenance, proof maps, task verdicts, and initiative closeout.
+- [x] Add regression coverage for quality verdict roll-up, evidence requirements, prompt versioning, and recovery classification.
+- [x] Wire protected Quality Mesh procedures for contract generation, proof-prompt compilation, terminal verification, recovery analysis, and task or initiative quality reads.
+- [x] Integrate versioned proof-carrying prompts into operator-confirmed Jules dispatch without enabling automatic dispatch or approval.
+- [x] Surface task-quality proof maps and initiative quality-gate summaries in the existing desktop control planes.
+- [x] Exercise the Quality Mesh procedures and desktop control surfaces with regression and visual verification.
+- [x] Add explicit Quality Mesh query-failure states and an evidence-requirement regression for terminal verification.

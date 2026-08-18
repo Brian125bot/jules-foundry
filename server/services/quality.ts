@@ -2,12 +2,28 @@ export type CriterionStatus = "proven" | "partial" | "unproven" | "contradicted"
 export type QualityVerdict = "accepted" | "conditionally_accepted" | "failed_verification" | "needs_human_review" | "provider_failed";
 export type RecoveryDomain = "contract" | "prompt" | "scope" | "environment" | "implementation" | "provider_uncertainty";
 
+export function buildDeterministicProofMap(input: { criteria: Array<{ id: string; text: string }>; evidence: Array<{ criterionId: string; status: CriterionStatus }> }) {
+  return input.criteria.map(criterion => {
+    const linked = input.evidence.filter(item => item.criterionId === criterion.id);
+    const states = linked.map(item => item.status);
+    const status: CriterionStatus = states.includes("contradicted") ? "contradicted" : states.includes("proven") ? "proven" : states.includes("partial") ? "partial" : "unproven";
+    return { ...criterion, status, blocking: true, evidenceCount: linked.length };
+  });
+}
+
 export function deriveQualityVerdict(input: { providerFailed?: boolean; deterministicPassed: boolean; criteria: Array<{ status: CriterionStatus; blocking?: boolean }>; adversarialMaterialFinding?: boolean }): QualityVerdict {
   if (input.providerFailed) return "provider_failed";
   if (!input.deterministicPassed || input.criteria.some(item => item.blocking !== false && item.status === "contradicted")) return "failed_verification";
   if (input.adversarialMaterialFinding || input.criteria.some(item => item.blocking !== false && item.status === "unproven")) return "needs_human_review";
   if (input.criteria.some(item => item.status === "partial" || item.status === "unproven")) return "conditionally_accepted";
   return "accepted";
+}
+
+export function deriveInitiativeQualityVerdict(input: { taskCount: number; verdicts: Array<QualityVerdict | undefined> }): Exclude<QualityVerdict, "provider_failed"> {
+  if (input.verdicts.includes("failed_verification")) return "failed_verification";
+  if (input.verdicts.includes("needs_human_review") || input.verdicts.includes("provider_failed")) return "needs_human_review";
+  if (input.taskCount > 0 && input.verdicts.length === input.taskCount && input.verdicts.every(verdict => verdict === "accepted")) return "accepted";
+  return "conditionally_accepted";
 }
 
 export function classifyRecovery(input: { providerFailed?: boolean; deterministicPassed: boolean; outOfScope?: boolean; ambiguityScore?: number; failureText?: string }) {

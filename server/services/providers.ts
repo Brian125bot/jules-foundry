@@ -16,6 +16,34 @@ const compiledTaskSchema = z.object({
 
 export const compiledInitiativeSchema = z.object({ tasks: z.array(compiledTaskSchema).min(1).max(12) });
 export type CompiledInitiative = z.infer<typeof compiledInitiativeSchema>;
+const qualityContractSchema = z.object({
+  outcome: z.string().min(12).max(2200),
+  successSignals: z.array(z.string().min(4).max(300)).min(1).max(12),
+  constraints: z.array(z.string().min(4).max(300)).min(1).max(12),
+  nonGoals: z.array(z.string().min(4).max(300)).min(1).max(12),
+  risks: z.array(z.object({ risk: z.string().min(4).max(300), mitigation: z.string().min(4).max(500) })).max(12),
+  operatorQuestions: z.array(z.string().min(4).max(500)).max(8),
+});
+const qualityCriticSchema = z.object({
+  ambiguityScore: z.number().int().min(0).max(100),
+  findings: z.array(z.object({ severity: z.enum(["blocking", "material", "minor"]), finding: z.string().min(4).max(600), recommendedRevision: z.string().min(4).max(600) })).max(12),
+  recommendation: z.enum(["ready_for_operator_review", "revise_before_dispatch", "human_review_required"]),
+});
+const adversarialReviewSchema = z.object({
+  materialFinding: z.boolean(),
+  summary: z.string().min(4).max(1800),
+  criterionFindings: z.array(z.object({ criterionId: z.string().min(1).max(80), assessment: z.enum(["supported", "incomplete", "contradicted", "insufficient_evidence"]), rationale: z.string().min(4).max(700), evidenceReferences: z.array(z.string().min(1).max(500)).max(8) })).max(16),
+  operatorQuestions: z.array(z.string().min(4).max(500)).max(8),
+});
+const recoveryAdvisorSchema = z.object({
+  failureNarrative: z.string().min(8).max(1200),
+  operatorQuestions: z.array(z.string().min(4).max(500)).max(8),
+  evidenceToCollect: z.array(z.string().min(4).max(500)).max(8),
+});
+export type QualityContract = z.infer<typeof qualityContractSchema>;
+export type QualityCritic = z.infer<typeof qualityCriticSchema>;
+export type AdversarialReview = z.infer<typeof adversarialReviewSchema>;
+export type RecoveryAdvisor = z.infer<typeof recoveryAdvisorSchema>;
 const rawCompiledTaskSchema = compiledTaskSchema.extend({ allowedPaths: z.array(z.string().min(1)).max(12).optional() });
 const rawCompiledInitiativeSchema = z.object({ tasks: z.array(rawCompiledTaskSchema).min(1).max(12) });
 export const SCOPE_REVIEW_PATH = "__SCOPE_REVIEW_REQUIRED__";
@@ -69,6 +97,30 @@ const geminiResponseSchema = {
     },
   },
   required: ["tasks"],
+};
+
+const qualityContractResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    outcome: { type: "STRING" }, successSignals: { type: "ARRAY", items: { type: "STRING" } }, constraints: { type: "ARRAY", items: { type: "STRING" } }, nonGoals: { type: "ARRAY", items: { type: "STRING" } },
+    risks: { type: "ARRAY", items: { type: "OBJECT", properties: { risk: { type: "STRING" }, mitigation: { type: "STRING" } }, required: ["risk", "mitigation"] } }, operatorQuestions: { type: "ARRAY", items: { type: "STRING" } },
+  },
+  required: ["outcome", "successSignals", "constraints", "nonGoals", "risks", "operatorQuestions"],
+};
+const qualityCriticResponseSchema = {
+  type: "OBJECT",
+  properties: { ambiguityScore: { type: "INTEGER" }, findings: { type: "ARRAY", items: { type: "OBJECT", properties: { severity: { type: "STRING", enum: ["blocking", "material", "minor"] }, finding: { type: "STRING" }, recommendedRevision: { type: "STRING" } }, required: ["severity", "finding", "recommendedRevision"] } }, recommendation: { type: "STRING", enum: ["ready_for_operator_review", "revise_before_dispatch", "human_review_required"] } },
+  required: ["ambiguityScore", "findings", "recommendation"],
+};
+const adversarialResponseSchema = {
+  type: "OBJECT",
+  properties: { materialFinding: { type: "BOOLEAN" }, summary: { type: "STRING" }, criterionFindings: { type: "ARRAY", items: { type: "OBJECT", properties: { criterionId: { type: "STRING" }, assessment: { type: "STRING", enum: ["supported", "incomplete", "contradicted", "insufficient_evidence"] }, rationale: { type: "STRING" }, evidenceReferences: { type: "ARRAY", items: { type: "STRING" } } }, required: ["criterionId", "assessment", "rationale", "evidenceReferences"] } }, operatorQuestions: { type: "ARRAY", items: { type: "STRING" } } },
+  required: ["materialFinding", "summary", "criterionFindings", "operatorQuestions"],
+};
+const recoveryAdvisorResponseSchema = {
+  type: "OBJECT",
+  properties: { failureNarrative: { type: "STRING" }, operatorQuestions: { type: "ARRAY", items: { type: "STRING" } }, evidenceToCollect: { type: "ARRAY", items: { type: "STRING" } } },
+  required: ["failureNarrative", "operatorQuestions", "evidenceToCollect"],
 };
 
 function providerError(error: unknown) {
@@ -130,6 +182,39 @@ export async function compileWithGemini(secret: string, input: { prompt: string;
   } catch (error) {
     throw providerError(error);
   }
+}
+
+async function generateGeminiStructured<T>(secret: string, instruction: string, responseSchema: unknown, parse: (value: unknown) => T) {
+  try {
+    const response = await axios.post(`${GEMINI_BASE_URL}/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(secret)}`,
+      { contents: [{ role: "user", parts: [{ text: instruction }] }], generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.1, maxOutputTokens: 5000 } },
+      { timeout: 45000 });
+    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Gemini returned no structured assessment.");
+    return parse(JSON.parse(text));
+  } catch (error) { throw providerError(error); }
+}
+
+export async function generateQualityContract(secret: string, input: { prompt: string; repository: string; branch: string }) {
+  const contract = await generateGeminiStructured(secret,
+    `Act as a bounded delivery-contract planner. Create a concise acceptance contract for this coding initiative. This is a planning artifact only: do not claim code was changed, do not assume secrets, do not authorize dispatch, and keep all constraints reviewable by an operator. Repository: ${input.repository}; target branch: ${input.branch}. Initiative request:\n${input.prompt}`,
+    qualityContractResponseSchema, value => qualityContractSchema.parse(value));
+  const critic = await generateGeminiStructured(secret,
+    `Act as an independent contract critic. Review this proposed delivery contract against the original initiative. Flag ambiguity, missing measurable success signals, scope expansion, and unsafe assumptions. You only advise an operator; you must not approve work or request automatic dispatch. Original initiative:\n${input.prompt}\n\nProposed contract:\n${JSON.stringify(contract)}`,
+    qualityCriticResponseSchema, value => qualityCriticSchema.parse(value));
+  return { contract, critic };
+}
+
+export async function runAdversarialQualityReview(secret: string, input: { taskTitle: string; taskDescription: string; criteria: Array<{ id: string; text: string; deterministicStatus: string }>; evidence: Array<{ criterionId: string; status: string; label: string; reference?: string | null; detail?: string | null }> }) {
+  return generateGeminiStructured(secret,
+    `Act as a bounded adversarial verification reviewer. Review only the supplied local evidence for the completed Jules task below. Do not infer unlisted test results, diffs, files, or provider behavior. For every finding, cite only supplied evidence reference strings; an empty reference list is required if the evidence does not support the claim. Your analysis cannot override deterministic failures and never authorizes acceptance or redispatch.\n\nTask: ${input.taskTitle}\n${input.taskDescription}\n\nAcceptance criteria and deterministic status:\n${JSON.stringify(input.criteria)}\n\nEvidence:\n${JSON.stringify(input.evidence)}`,
+    adversarialResponseSchema, value => adversarialReviewSchema.parse(value));
+}
+
+export async function analyzeQualityRecovery(secret: string, input: { taskTitle: string; failureDomain: string; deterministicRecommendation: string; failureText?: string | null; deterministicFacts: unknown }) {
+  return generateGeminiStructured(secret,
+    `Act as a bounded failure-analysis adviser. The deterministic recovery domain and recommendation below are authoritative. Explain only what an operator should inspect, what evidence is still needed, and what question needs a decision. Do not recommend automatic redispatch, scope expansion, credential rotation, or provider-side changes.\n\nTask: ${input.taskTitle}\nDeterministic failure domain: ${input.failureDomain}\nDeterministic recommendation: ${input.deterministicRecommendation}\nObserved failure text: ${input.failureText ?? "none"}\nDeterministic facts: ${JSON.stringify(input.deterministicFacts)}`,
+    recoveryAdvisorResponseSchema, value => recoveryAdvisorSchema.parse(value));
 }
 
 export async function validateGitHubBranch(secret: string, repository: string, branch: string) {
