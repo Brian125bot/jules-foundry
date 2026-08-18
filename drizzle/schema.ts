@@ -168,6 +168,49 @@ export const taskApprovals = mysqlTable(
   table => [index("approval_task_idx").on(table.taskId, table.createdAt)],
 );
 
+export const qualityContracts = mysqlTable("quality_contracts", {
+  id: int("id").autoincrement().primaryKey(),
+  initiativeId: int("initiativeId").notNull(),
+  version: int("version").default(1).notNull(),
+  outcome: text("outcome").notNull(),
+  contractJson: text("contractJson").notNull(),
+  criticJson: text("criticJson"),
+  ambiguityScore: int("ambiguityScore").default(0).notNull(),
+  decision: mysqlEnum("decision", ["draft", "approved", "revise", "human_review"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("quality_contract_initiative_idx").on(table.initiativeId, table.createdAt)]);
+
+export const qualityPrompts = mysqlTable("quality_prompts", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  contractId: int("contractId"),
+  templateVersion: varchar("templateVersion", { length: 40 }).notNull(),
+  promptDigest: varchar("promptDigest", { length: 128 }).notNull(),
+  promptText: text("promptText").notNull(),
+  twinJson: text("twinJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("quality_prompt_task_idx").on(table.taskId, table.createdAt), uniqueIndex("quality_prompt_digest_unique").on(table.promptDigest)]);
+
+export const qualityVerifications = mysqlTable("quality_verifications", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  verdict: mysqlEnum("verdict", ["accepted", "conditionally_accepted", "failed_verification", "needs_human_review", "provider_failed"]).notNull(),
+  deterministicJson: text("deterministicJson").notNull(),
+  evidenceJson: text("evidenceJson").notNull(),
+  adversarialJson: text("adversarialJson"),
+  summary: text("summary").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("quality_verification_task_idx").on(table.taskId, table.createdAt)]);
+
+export const qualityRecoveries = mysqlTable("quality_recoveries", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  domain: mysqlEnum("domain", ["contract", "prompt", "scope", "environment", "implementation", "provider_uncertainty"]).notNull(),
+  recommendation: text("recommendation").notNull(),
+  autoRetryEligible: int("autoRetryEligible").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("quality_recovery_task_idx").on(table.taskId, table.createdAt)]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type CredentialProfile = typeof credentialProfiles.$inferSelect;

@@ -61,3 +61,8 @@
 - [x] Validate desktop layouts, interaction affordances, and regression coverage without removing existing functionality.
 - [x] Add and run desktop control-smoke coverage for retained workspace actions, then record the interactive-layout validation findings.
 - [x] Compose an LLM-assisted automation plan for Jules task planning, prompt construction, completion/failure analysis, and end-to-end correctness verification.
+- [ ] Add Quality Mesh persistence for contracts, prompts, task twins, verification runs, criterion verdicts, and recovery analysis.
+- [ ] Implement guarded Gemini planning, contract critique, prompt compilation, completion verification, and failure-recovery services.
+- [ ] Add Quality Mesh APIs and quality-gate actions that preserve deterministic checks and operator approval boundaries.
+- [ ] Build desktop Quality Mesh workspaces for contract review, prompt provenance, proof maps, task verdicts, and initiative closeout.
+- [ ] Add regression coverage for quality verdict roll-up, evidence requirements, prompt versioning, and recovery classification.
