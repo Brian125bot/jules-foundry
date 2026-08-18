@@ -91,3 +91,4 @@
 - [x] Persist the selected Gemini model and validate it against the credential’s live Gemini model catalog before inference.
 - [x] Expose a desktop model selector in initiative composition and retain the selected model in planning and Quality Mesh provenance.
 - [x] Add regression coverage and release verification for Gemini model selection, fallback, and availability safeguards.
+- [x] Add a focused end-to-end model-selector regression that proves selected-model persistence and inference-boundary validation together.
