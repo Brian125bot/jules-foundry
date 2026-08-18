@@ -92,3 +92,8 @@
 - [x] Expose a desktop model selector in initiative composition and retain the selected model in planning and Quality Mesh provenance.
 - [x] Add regression coverage and release verification for Gemini model selection, fallback, and availability safeguards.
 - [x] Add a focused end-to-end model-selector regression that proves selected-model persistence and inference-boundary validation together.
+- [x] Add an accessible About and How to Use button with a governed product-orientation popup in the dashboard shell.
+- [ ] Open the About and How to Use popup from an authenticated dashboard session and visually verify its full content and containment at desktop width.
+- [ ] Open the About and How to Use popup from an authenticated dashboard session and visually verify its full content and containment at mobile width.
+- [ ] Interactively verify About-popup dismissal behavior from an authenticated dashboard session, then record the result.
+- [ ] Commit and publish the completed About and How to Use popup implementation and regression coverage to GitHub main.

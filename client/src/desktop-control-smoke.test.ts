@@ -69,4 +69,15 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("Gemini model");
     expect(source).toContain("promptGeminiModel");
   });
+
+  it("retains the shared About and How to Use orientation popup", async () => {
+    const source = await readFile(path.join(process.cwd(), "client", "src", "components", "DashboardLayout.tsx"), "utf8");
+    expect(source).toContain("About &amp; how to use");
+    expect(source).toContain("About Jules Foundry");
+    expect(source).toContain("How to use the Foundry");
+    expect(source).toContain("Operator authority stays explicit");
+    expect(source).toContain("Start in Credential vault");
+    expect(source).toContain('new URLSearchParams(window.location.search).get("about") === "1"');
+    expect(source).toContain("<Dialog open={aboutOpen} onOpenChange={setAboutOpen}>");
+  });
 });
