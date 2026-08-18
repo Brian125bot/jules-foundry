@@ -10,6 +10,12 @@ build/
 # Environment variables
 .env
 .env.local
+src-tauri/tauri.conf.json
+src-tauri/binaries/
+src-tauri/resources/
+desktop-dist/
+release/
+.env.local
 .env.development.local
 .env.test.local
 .env.production.local

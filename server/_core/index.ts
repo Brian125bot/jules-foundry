@@ -5,11 +5,13 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
-import { getLocalDb } from "../local-db";
-import { configureLocalListener, establishLocalSession, openLocalBrowser } from "../local-runtime";
+import { serveLocalStatic } from "./static";
+import { checkpointLocalDb, closeLocalDb, getLocalDb } from "../local-db";
+import { acquireLocalInstanceLock, configureLocalListener, establishLocalSession, openLocalBrowser, releaseLocalInstanceLock, runLocalPreflight } from "../local-runtime";
 import { registerLocalStorageRoutes } from "../local-storage";
 import { startLocalMonitor, stopLocalMonitor } from "../services/local-monitor";
+import { migrateLegacyVaultCiphertexts } from "../services/vault-migration";
+import { createLocalShutdownHandler } from "../local-shutdown";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -25,7 +27,11 @@ async function findAvailablePort(startPort = 31415): Promise<number> {
 }
 
 async function startServer() {
+  const lock = acquireLocalInstanceLock();
+  const preflight = await runLocalPreflight();
+  if (!preflight.ready) throw new Error(`Jules Foundry requires at least ${preflight.minimumFreeBytes} bytes of free local storage before startup.`);
   await getLocalDb();
+  await migrateLegacyVaultCiphertexts().catch(error => { console.warn("[Vault] Legacy ciphertext migration deferred:", error instanceof Error ? error.message : "unknown error"); });
   const app = express();
   const server = createServer(app);
   app.disable("x-powered-by");
@@ -43,8 +49,10 @@ async function startServer() {
   app.get("/local/bootstrap", establishLocalSession);
   app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
   registerLocalStorageRoutes(app);
-  if (process.env.NODE_ENV === "development") await setupVite(app, server);
-  else serveStatic(app);
+  if (process.env.NODE_ENV === "development" && !process.env.FOUNDRY_STATIC_DIR) {
+    const { setupVite } = await import("./vite");
+    await setupVite(app, server);
+  } else serveLocalStatic(app);
 
   const port = await findAvailablePort(Number.parseInt(process.env.FOUNDRY_PORT || "31415", 10));
   configureLocalListener(port);
@@ -53,9 +61,16 @@ async function startServer() {
     openLocalBrowser(port);
     startLocalMonitor();
   });
-  const shutdown = () => { stopLocalMonitor(); server.close(); };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  const shutdown = createLocalShutdownHandler({
+    stopMonitor: stopLocalMonitor,
+    checkpointDatabase: checkpointLocalDb,
+    closeDatabase: closeLocalDb,
+    releaseInstanceLock: releaseLocalInstanceLock,
+    closeListener: () => server.close(),
+    warn: message => console.warn(message),
+  });
+  process.once("SIGINT", () => void shutdown());
+  process.once("SIGTERM", () => void shutdown());
 }
 
-startServer().catch(error => { console.error("Jules Foundry local startup failed", error); process.exitCode = 1; });
+startServer().catch(error => { releaseLocalInstanceLock(); console.error("Jules Foundry local startup failed", error); process.exitCode = 1; });

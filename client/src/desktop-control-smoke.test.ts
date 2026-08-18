@@ -27,6 +27,18 @@ describe("desktop control-plane smoke coverage", () => {
     expect(source).toContain("credentials.test.useMutation");
     expect(source).toContain("credentials.delete.useMutation");
     expect(source).toContain("Rotate credential");
+    expect(source).toContain("setRestoreCandidate(backup.filename)");
+    expect(source).toContain("Stage verified restore");
+    expect(source).toContain("cannot overwrite the active ledger");
+  });
+
+  it("retains first-run local onboarding without triggering provider work", async () => {
+    const source = await pageSource("LocalOperations.tsx");
+    expect(source).toContain('data-testid="local-onboarding"');
+    expect(source).toContain("Establish this machine’s operating baseline");
+    expect(source).toContain("Mark setup complete");
+    expect(source).toContain("onboardingCompleted: true");
+    expect(source).toContain("never dispatches work");
   });
 
   it("retains initiative create, compile, mission-open, and deletion controls", async () => {
