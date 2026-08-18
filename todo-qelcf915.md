@@ -31,4 +31,4 @@
 - [x] Revalidate local installation, `pnpm start`, and `pnpm release:verify` without workflows.
 - [x] Audit all remaining documentation for outdated desktop, workflow, or hosted-operation guidance.
 - [x] Update documentation for the final clone-and-run Node local server workflow and credential-vault use.
-- [ ] Verify the documented local commands and publish the reconciled project state to GitHub.
+- [x] Verify the documented local commands and publish the reconciled project state to GitHub; local and remote `main` now match.
