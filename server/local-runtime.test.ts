@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configureLocalListener, establishLocalSession, hasLocalSession, localLaunchPath, requireLocalSession } from "./local-runtime";
+import { clearLocalSession, configureLocalListener, establishLocalSession, hasLocalSession, localLaunchPath, requireLocalSession } from "./local-runtime";
 import { shouldPollCheckpoint } from "./services/local-monitor";
 
 describe("trusted-machine local runtime", () => {
@@ -27,6 +27,18 @@ describe("trusted-machine local runtime", () => {
     expect(sessionCookie).toContain("HttpOnly");
     expect(sessionCookie).toContain("SameSite=Strict");
     expect(hasLocalSession({ socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:31415", cookie: sessionCookie } } as any)).toBe(true);
+  });
+  it("revokes the server-side local session token during logout", async () => {
+    vi.resetModules();
+    const runtime = await import("./local-runtime");
+    runtime.configureLocalListener(31415);
+    const bootstrap = new URL(`http://127.0.0.1:31415${runtime.localLaunchPath()}`).searchParams.get("bootstrap");
+    const headers = new Map<string, string>();
+    runtime.establishLocalSession({ socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:31415" }, query: { bootstrap } } as any, { setHeader: (name: string, value: string) => headers.set(name, value), redirect: vi.fn() } as any);
+    const sessionCookie = headers.get("Set-Cookie") || "";
+    expect(runtime.hasLocalSession({ socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:31415", cookie: sessionCookie } } as any)).toBe(true);
+    runtime.clearLocalSession({ setHeader: vi.fn() } as any);
+    expect(runtime.hasLocalSession({ socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:31415", cookie: sessionCookie } } as any)).toBe(false);
   });
 
   it("polls only checkpoints that are absent or due", () => {

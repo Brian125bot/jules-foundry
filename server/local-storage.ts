@@ -29,9 +29,10 @@ export async function storageGetSignedUrl(key: string) {
 }
 
 export function registerLocalStorageRoutes(app: Express) {
-  app.get("/local-artifacts/*", requireLocalSession, async (req: Request, res: Response) => {
+  app.get("/local-artifacts/{*key}", requireLocalSession, async (req: Request, res: Response) => {
     try {
-      const key = req.params[0] || "";
+      const keyValue = req.params.key;
+      const key = Array.isArray(keyValue) ? keyValue.join("/") : keyValue || "";
       const target = artifactPath(key);
       const metadata = await stat(target);
       if (!metadata.isFile()) throw new Error("Not a file");

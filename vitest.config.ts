@@ -15,5 +15,22 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      include: [
+        "server/local-runtime.ts",
+        "server/local-db.ts",
+        "server/local-storage.ts",
+        "server/services/session-control.ts",
+        "server/services/vault.ts",
+      ],
+      thresholds: {
+        statements: 85,
+        branches: 60,
+        functions: 85,
+        lines: 85,
+      },
+    },
   },
 });

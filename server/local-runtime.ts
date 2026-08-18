@@ -71,7 +71,7 @@ export async function runLocalPreflight() {
 }
 
 const bootstrapToken = process.env.FOUNDRY_DESKTOP_BOOTSTRAP_TOKEN || randomBytes(32).toString("base64url");
-const sessionToken = randomBytes(32).toString("base64url");
+let sessionToken = randomBytes(32).toString("base64url");
 let bootstrapConsumed = false;
 let allowedPort: number | null = null;
 
@@ -133,8 +133,11 @@ export function establishLocalSession(req: Request, res: Response) {
   res.redirect(303, "/");
 }
 
-export function clearLocalSession(res: Response) { res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`); }
+export function clearLocalSession(res: Response) {
+  sessionToken = randomBytes(32).toString("base64url");
+  res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+}
 
 export function localRuntimeStatus() {
-  return { mode: "trusted-machine-local-first" as const, dataDirectory: LOCAL_DATA_DIR, loopbackOnly: true, providerCallsServerSideOnly: true, monitoringRunsOnlyWhileApplicationIsRunning: true, singleInstanceLock: LOCAL_LOCK_PATH };
+  return { mode: "trusted-machine-local-first" as const, dataDirectory: LOCAL_DATA_DIR, loopbackOnly: true, providerCallsServerSideOnly: true, monitoringRunsOnlyWhileApplicationIsRunning: true, sessionRevocationSupported: true, singleInstanceLock: LOCAL_LOCK_PATH };
 }

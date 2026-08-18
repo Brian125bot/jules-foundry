@@ -14,13 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
+        with: { version: 10.4.1 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: FOUNDRY_VAULT_MODE=passphrase FOUNDRY_VAULT_PASSPHRASE=ci-release-key pnpm check
-      - run: FOUNDRY_VAULT_MODE=passphrase FOUNDRY_VAULT_PASSPHRASE=ci-release-key pnpm test
+      - run: FOUNDRY_VAULT_MODE=passphrase FOUNDRY_VAULT_PASSPHRASE=ci-release-key pnpm test:coverage
       - run: pnpm build
+      - run: pnpm build:check-bundle
+      - run: pnpm build:verify-output
+      - run: pnpm release:policy
+      - run: pnpm release:audit
       - run: pnpm release:sbom
       - uses: actions/upload-artifact@v4
         with: { name: verification-and-sbom, path: release }
@@ -40,13 +44,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
+        with: { version: 10.4.1 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: ${{ matrix.target }} }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm desktop:configure-updater
+      - run: pnpm desktop:config:signed
         env:
           TAURI_UPDATE_PUBLIC_KEY: ${{ secrets.TAURI_UPDATE_PUBLIC_KEY }}
           TAURI_UPDATE_ENDPOINT: ${{ secrets.TAURI_UPDATE_ENDPOINT }}

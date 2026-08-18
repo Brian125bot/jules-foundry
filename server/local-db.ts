@@ -6,11 +6,9 @@ import type { drizzle as DrizzleFactory } from "drizzle-orm/libsql";
 import * as schema from "../drizzle/schema";
 import { ensureLocalDirectories, LOCAL_BACKUP_DIR, LOCAL_DATA_DIR, LOCAL_DB_PATH } from "./local-runtime";
 
-const MIGRATION_ID = "0000_open_khan";
 const configuredMigrationPath = process.env.FOUNDRY_MIGRATION_PATH;
-const migrationUrl = configuredMigrationPath ? null : new URL("../drizzle-local/0000_open_khan.sql", import.meta.url);
 const nativeModuleRoot = process.env.FOUNDRY_NATIVE_MODULES_DIR;
-const runtimeRequire = nativeModuleRoot ? createRequire(join(nativeModuleRoot, ".foundry-runtime.cjs")) : createRequire(import.meta.url);
+const runtimeRequire = nativeModuleRoot ? createRequire(join(nativeModuleRoot, ".foundry-runtime.cjs")) : createRequire(join(process.cwd(), "package.json"));
 const { createClient } = runtimeRequire("@libsql/client") as typeof import("@libsql/client");
 const { drizzle: drizzleFactory } = runtimeRequire("drizzle-orm/libsql") as typeof import("drizzle-orm/libsql");
 let client: Client | null = null;
@@ -29,28 +27,62 @@ async function openClient() {
 
 async function applyMigrations(database: Client) {
   await database.execute("CREATE TABLE IF NOT EXISTS __foundry_local_migrations (id TEXT PRIMARY KEY NOT NULL, appliedAt INTEGER NOT NULL)");
-  const existing = await database.execute({ sql: "SELECT id FROM __foundry_local_migrations WHERE id = ?", args: [MIGRATION_ID] });
-  if (existing.rows.length) return;
-  const migrationSource = configuredMigrationPath || migrationUrl;
-  if (!migrationSource) throw new Error("No local SQLite migration path is available.");
-  const source = (await readFile(migrationSource, "utf8")).replaceAll("--> statement-breakpoint", "");
-  const transaction = await database.transaction("write");
-  try {
-    await transaction.executeMultiple(source);
-    const now = new Date();
-    const nowSeconds = Math.floor(now.getTime() / 1_000);
-    await transaction.execute({
-      sql: "INSERT INTO users (id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn) VALUES (1, ?, ?, NULL, 'local', 'admin', ?, ?, ?)",
-      args: ["local-operator", "Local operator", nowSeconds, nowSeconds, nowSeconds],
-    });
-    await transaction.execute({ sql: "INSERT INTO __foundry_local_migrations (id, appliedAt) VALUES (?, ?)", args: [MIGRATION_ID, now] });
-    await transaction.commit();
-  } catch (error) {
-    await transaction.rollback();
-    throw error;
-  } finally {
-    transaction.close();
+  const migrationDirectory = configuredMigrationPath ? dirname(configuredMigrationPath) : join(process.cwd(), "drizzle-local");
+  const migrations = [
+    { id: "0000_open_khan", file: configuredMigrationPath || join(migrationDirectory, "0000_open_khan.sql"), seedsLocalOperator: true },
+    { id: "0001_integrity_guards", file: join(migrationDirectory, "0001_integrity_guards.sql"), seedsLocalOperator: false },
+    { id: "0002_relax_operator_fixture_guards", file: join(migrationDirectory, "0002_relax_operator_fixture_guards.sql"), seedsLocalOperator: false },
+  ];
+  for (const migration of migrations) {
+    const existing = await database.execute({ sql: "SELECT id FROM __foundry_local_migrations WHERE id = ?", args: [migration.id] });
+    if (existing.rows.length) continue;
+    if (migration.id === "0001_integrity_guards") {
+      const integrity = await getLocalDatabaseIntegrity(database);
+      if (!integrity.healthy) throw new Error(`Refusing to install integrity guards while local data has integrity failures: ${integrity.failures.join("; ")}`);
+    }
+    const source = (await readFile(migration.file, "utf8")).replaceAll("--> statement-breakpoint", "");
+    const transaction = await database.transaction("write");
+    try {
+      await transaction.executeMultiple(source);
+      const now = new Date();
+      if (migration.seedsLocalOperator) {
+        const nowSeconds = Math.floor(now.getTime() / 1_000);
+        await transaction.execute({
+          sql: "INSERT INTO users (id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn) VALUES (1, ?, ?, NULL, 'local', 'admin', ?, ?, ?)",
+          args: ["local-operator", "Local operator", nowSeconds, nowSeconds, nowSeconds],
+        });
+      }
+      await transaction.execute({ sql: "INSERT INTO __foundry_local_migrations (id, appliedAt) VALUES (?, ?)", args: [migration.id, now] });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    } finally {
+      transaction.close();
+    }
   }
+}
+
+export async function getLocalDatabaseIntegrity(database?: Client) {
+  const activeClient = database || await getLocalClient();
+  const [integrityCheck, foreignKeyState, orphanedTasks, orphanedInitiatives, orphanedEvents] = await Promise.all([
+    activeClient.execute("PRAGMA integrity_check"),
+    activeClient.execute("PRAGMA foreign_keys"),
+    activeClient.execute("SELECT COUNT(*) AS count FROM tasks LEFT JOIN initiatives ON initiatives.id = tasks.initiativeId WHERE initiatives.id IS NULL"),
+    activeClient.execute("SELECT COUNT(*) AS count FROM initiatives LEFT JOIN users ON users.id = initiatives.userId WHERE users.id IS NULL"),
+    activeClient.execute("SELECT COUNT(*) AS count FROM task_events LEFT JOIN tasks ON tasks.id = task_events.taskId WHERE tasks.id IS NULL"),
+  ]);
+  const orphans = {
+    tasks: Number(orphanedTasks.rows[0]?.count ?? 0),
+    initiatives: Number(orphanedInitiatives.rows[0]?.count ?? 0),
+    taskEvents: Number(orphanedEvents.rows[0]?.count ?? 0),
+  };
+  const failures = [
+    ...(integrityCheck.rows[0]?.integrity_check === "ok" ? [] : ["SQLite integrity_check did not return ok"]),
+    ...(Number(foreignKeyState.rows[0]?.foreign_keys ?? 0) === 1 ? [] : ["SQLite foreign-key enforcement is disabled"]),
+    ...Object.entries(orphans).filter(([, value]) => value > 0).map(([table, value]) => `${value} orphaned ${table}`),
+  ];
+  return { healthy: failures.length === 0, sqliteIntegrity: integrityCheck.rows[0]?.integrity_check === "ok", foreignKeysEnabled: Number(foreignKeyState.rows[0]?.foreign_keys ?? 0) === 1, orphans, failures };
 }
 
 async function normalizeSeededOperatorTimestamps(database: Client) {
