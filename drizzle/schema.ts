@@ -51,6 +51,7 @@ export const initiatives = mysqlTable(
     branch: varchar("branch", { length: 255 }).notNull(),
     baseSha: varchar("baseSha", { length: 80 }),
     budgetCents: int("budgetCents").default(500).notNull(),
+    geminiModel: varchar("geminiModel", { length: 80 }).default("gemini-2.5-flash").notNull(),
     status: mysqlEnum("status", ["draft", "compiled", "active", "complete", "attention"]).default("draft").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
