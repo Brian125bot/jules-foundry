@@ -48,3 +48,5 @@
 - [x] Add a fail-closed, opt-in live provider contract framework using disposable resources and redacted transcripts.
 - [x] Validate all implementable P0 controls and document owner-provided prerequisites for live provider credentials and public release publishing.
 - [x] Keep the credential-dependent live-provider contract unexecuted by user direction and document it as a release-owner prerequisite.
+- [ ] Stage the Linux technical-preview release from the clean committed worktree without the dry-run override.
+- [ ] Verify the publishable manifest classification, checksum, SBOM, archive inspection, and release-note contents.
