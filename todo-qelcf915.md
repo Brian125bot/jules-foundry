@@ -47,4 +47,4 @@
 - [x] Add reproducible release staging, checksums, manifest, archive inspection, and release evidence documentation.
 - [x] Add a fail-closed, opt-in live provider contract framework using disposable resources and redacted transcripts.
 - [x] Validate all implementable P0 controls and document owner-provided prerequisites for live provider credentials and public release publishing.
-- [ ] Keep the credential-dependent live-provider contract unexecuted by user direction and document it as a release-owner prerequisite.
+- [x] Keep the credential-dependent live-provider contract unexecuted by user direction and document it as a release-owner prerequisite.
