@@ -57,3 +57,9 @@
 - [x] Defer the opt-in live-provider certification pending user-provided disposable credentials and retain it as a documented public-release prerequisite.
 - [x] Create a public-safe Linux technical-preview feedback submission and maintainer triage template.
 - [x] Review the template for alignment with release scope, support, privacy, and security-reporting guidance.
+- [x] Promote GitHub Release `v1.0.0` from prerelease to stable and add the feedback-template link to its public notes.
+- [x] Create and pin a public Linux technical-preview feedback-triage issue because GitHub Discussions are disabled.
+- [x] Create matching GitHub issue labels for P0, P1, P2, and P3 triage severity.
+- [x] Create a weekly AI-assisted maintainer review schedule for new Linux technical-preview issues.
+- [x] Verify the public release state, pinned issue, severity labels, and weekly review schedule.
+- [x] Reconcile public release-scope, support, readiness, and feedback-triage documentation with the stable Linux x64 release state.

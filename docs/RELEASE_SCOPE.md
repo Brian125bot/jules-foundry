@@ -2,7 +2,7 @@
 
 ## Current release class
 
-**Technical preview for experienced single-machine operators.** The current direct-user release target is `linux-x64` only until the platform matrix has been independently certified.
+**Stable Linux x64 release for experienced single-machine operators.** The supported direct-user target is `linux-x64` only. macOS and Windows are intentionally outside the current product scope.
 
 ## Supported operating model
 

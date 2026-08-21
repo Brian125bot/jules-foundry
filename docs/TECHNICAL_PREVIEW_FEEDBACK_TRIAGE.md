@@ -1,6 +1,6 @@
-# Linux Technical-Preview Feedback and Triage
+# Linux Feedback and Triage
 
-Use this template for the `v1.0.0` Linux x64 (`linux-x64`) technical preview. It is designed for public GitHub issues and for maintainers’ follow-up triage. The preview supports a **single operator on one Linux machine** running the loopback-only local service. It does not claim macOS or Windows support.
+Use this template for the stable `v1.0.0` Linux x64 (`linux-x64`) release. It is designed for public GitHub issues and for maintainers’ follow-up triage. Jules Foundry supports a **single operator on one Linux machine** running the loopback-only local service. It does not claim macOS or Windows support.
 
 > **Never include secrets or sensitive local data.** Do not post provider tokens, `.env` files, local databases, backups, browser cookies, one-time bootstrap URLs, unredacted request bodies, or proprietary repository contents. Report suspected vulnerabilities privately through the path in [SECURITY.md](../SECURITY.md).
 
@@ -80,7 +80,7 @@ Copy this section into the issue description, a private maintainer note, or a li
 | Triage owner | |
 | Affected release / commit | |
 | Reproduced | Yes / No / Needs reporter follow-up |
-| Scope | Linux x64 technical preview |
+| Scope | Stable Linux x64 release |
 | Reporter data redacted | Yes / Needs remediation |
 | Security escalation required | Yes / No |
 
@@ -106,13 +106,13 @@ Copy this section into the issue description, a private maintainer note, or a li
 - [ ] Document a workaround
 - [ ] Fix in patch release
 - [ ] Escalate privately under `SECURITY.md`
-- [ ] Track for a future technical-preview release
+- [ ] Track for a future Linux release
 ```
 
-## Weekly preview review
+## Weekly release review
 
-Review newly filed issues at least weekly while the preview is active. Group reports by install/startup, credential setup, browser session, provider workflow, local data safety, and documentation. Promote a defect to P1 when it blocks a supported Linux x64 user from completing a core local workflow without a reasonable workaround. Publish only redacted summaries of recurring provider or security patterns.
+Review newly filed issues at least weekly while the release is supported. Group reports by install/startup, credential setup, browser session, provider workflow, local data safety, and documentation. Promote a defect to P1 when it blocks a supported Linux x64 user from completing a core local workflow without a reasonable workaround. Publish only redacted summaries of recurring provider or security patterns.
 
-## Maintainer exit criteria for the next preview update
+## Maintainer exit criteria for the next release update
 
-Before issuing another technical-preview release, confirm that P0 security reports have followed the private path, P1 reports have a disposition, new release notes contain known workarounds, and the archive, checksum, SBOM, manifest, and release notes are reviewed together.
+Before issuing another Linux release, confirm that P0 security reports have followed the private path, P1 reports have a disposition, new release notes contain known workarounds, and the archive, checksum, SBOM, manifest, and release notes are reviewed together.

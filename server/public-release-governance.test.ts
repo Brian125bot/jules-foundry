@@ -16,6 +16,7 @@ describe("public release governance", () => {
     expect(contributing).toContain("pnpm release:verify");
     expect(support).toContain("best-effort");
     expect(scope).toContain("linux-x64");
+    expect(scope).toContain("Stable Linux x64 release");
   });
 
   it("documents the current v2 vault model and rejects obsolete JWT-secret claims", async () => {
@@ -28,11 +29,12 @@ describe("public release governance", () => {
     expect(security).not.toContain("process.env.JWT_SECRET");
   });
 
-  it("ships a public-safe Linux technical-preview feedback and triage template", async () => {
+  it("ships a public-safe stable Linux feedback and triage template", async () => {
     const [feedback, readme, support] = await Promise.all([
       text("../docs/TECHNICAL_PREVIEW_FEEDBACK_TRIAGE.md"), text("../README.md"), text("../SUPPORT.md"),
     ]);
     expect(feedback).toContain("linux-x64");
+    expect(feedback).toContain("stable `v1.0.0`");
     expect(feedback).toContain("Never include secrets");
     expect(feedback).toContain("P0");
     expect(feedback).toContain("SECURITY.md");

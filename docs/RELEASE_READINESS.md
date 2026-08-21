@@ -17,7 +17,7 @@ Run the following commands from a clean checkout using the pinned pnpm version d
 
 `pnpm release:verify` runs the complete Node/browser release gate above. `pnpm start` then builds and opens the same local application in the default browser.
 
-## Public technical-preview staging
+## Stable Linux release staging
 
 Use `pnpm release:stage` only from a clean, reviewed commit. It runs the local release gate, produces the direct-user archive, inspects archive contents, and stages a checksum, CycloneDX SBOM, manifest, and release notes under `release/v<version>/`. Publish those files together; a direct-user archive without its checksum and manifest is not a release artifact.
 
@@ -30,7 +30,7 @@ The opt-in command `RUN_LIVE_PROVIDER_CONTRACTS=1 pnpm test:providers:live` veri
 | Clean release artifact | The staging command was exercised only under its explicit dirty-worktree dry-run override. Such evidence is labelled `nonpublishable-dry-run`. | Commit the reviewed source, run `pnpm release:stage` without `FOUNDRY_RELEASE_ALLOW_DIRTY`, and verify the staged checksum from its release directory. |
 | Live-provider certification | The fail-closed command and redacted-transcript design are implemented. Execution was deliberately deferred without disposable credentials. | Provide least-privilege Gemini, Jules, and GitHub credentials limited to a disposable fixture repository, run the opt-in command, and retain only its redacted transcript. |
 | GitHub release publication | No hosted release is created by project tooling. | Independently review the clean staged archive, checksum, SBOM, manifest, release notes, and any certification transcript before attaching them to a GitHub Release. |
-| Other desktop platforms | Not in the current Linux technical-preview scope. | Complete platform-specific testing and release evidence before declaring macOS or Windows support. |
+| Other desktop platforms | macOS and Windows are outside the supported Linux x64 scope. | Do not claim or ship support for those platforms without an explicit future scope change and separate release evidence. |
 
 ## Current implementation status
 
