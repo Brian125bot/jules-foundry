@@ -51,3 +51,5 @@
 - [x] Stage the Linux technical-preview release from the clean committed worktree without the dry-run override.
 - [x] Verify the publishable manifest classification, checksum, SBOM, archive inspection, and release-note contents.
 - [x] Inspect the clean staged release notes for target, Node requirement, checksum instructions, and declared limitations.
+- [x] Create the public GitHub `v1.0.0` technical-preview release and upload the five verified staged files.
+- [x] Verify the published GitHub Release URL, public state, tag, and exact five release assets.
