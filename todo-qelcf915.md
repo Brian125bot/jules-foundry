@@ -37,3 +37,14 @@
 - [x] Document contributor versus direct-user installation paths and release-bundle creation.
 - [x] Validate the production-only bundle from an isolated directory without dev dependencies and confirm contributor frozen-install reproducibility.
 - [x] Push the checkpointed prebuilt distribution workflow to GitHub and verify that local and remote `main` match.
+- [x] Audit the canonical source for public-release and direct local-use readiness.
+- [x] Validate declared release commands and direct-user distribution behavior where feasible.
+- [x] Deliver a graded evidence-based critique with release conditions and prioritized risks.
+- [x] Map high-priority release blockers into executable workstreams.
+- [x] Write and deliver a step-by-step implementation guide with acceptance evidence.
+- [x] Add public legal, privacy, support, contributor, and security-reporting materials with owner-confirmed placeholders avoided.
+- [x] Correct vault and recovery documentation and add a regression test that prevents cryptographic documentation drift.
+- [x] Add reproducible release staging, checksums, manifest, archive inspection, and release evidence documentation.
+- [x] Add a fail-closed, opt-in live provider contract framework using disposable resources and redacted transcripts.
+- [x] Validate all implementable P0 controls and document owner-provided prerequisites for live provider credentials and public release publishing.
+- [ ] Keep the credential-dependent live-provider contract unexecuted by user direction and document it as a release-owner prerequisite.

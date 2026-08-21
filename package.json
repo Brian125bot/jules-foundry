@@ -12,6 +12,8 @@
     "start": "pnpm build && NODE_ENV=production node dist/index.js",
     "local": "pnpm start",
     "local:bundle": "pnpm build && node scripts/prepare-local-release.mjs",
+    "release:stage": "node scripts/stage-release.mjs",
+    "test:providers:live": "node scripts/live-provider-contract.mjs",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",

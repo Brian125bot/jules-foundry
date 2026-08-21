@@ -1,89 +1,34 @@
-# Jules Foundry Security and Governance Architecture
+# Security and Governance
 
-## Overview
+## Security model
 
-Jules Foundry is designed for high-consequence enterprise software engineering environments. Because autonomous agents possess the ability to alter code, create pull requests, and execute commands, Jules Foundry incorporates rigorous security boundaries, strict path containment, short-lived concurrency leases, and zero-leak credential handling.
+Jules Foundry is a local-first orchestration console for one trusted operating-system user. It binds the service to loopback, opens a one-time browser bootstrap URL, and exchanges that capability for an `HttpOnly`, `SameSite=Strict` local session. It is not a shared-host, multi-tenant, LAN, or reverse-proxy service.
 
----
+The server rejects non-loopback requests and unexpected host/origin combinations. Browser responses use local-only Content Security Policy, `X-Frame-Options: DENY`, `nosniff`, no-store caching, and cross-origin isolation headers. Do not expose the local port with a tunnel or reverse proxy. [1]
 
-## 1. Write-Only Credential Vault (`server/services/vault.ts`)
+## Credential vault
 
-### Zero-Leak Design
-Raw API keys and tokens (Jules API key, Gemini API key, GitHub fine-grained PATs) are treated as **write-only secrets**:
-- Secret fields are accepted via `save` mutations and immediately encrypted server-side.
-- Raw secret values are **never stored in plaintext**, never written to logs, and **never returned in API responses or tRPC queries**.
-- API queries return only a masked preview string (e.g., `...a1b2`), the credential label, provider status, version, and timestamp.
+Provider credentials are write-only. A submitted plaintext secret is encrypted on the local server before persistence and is never returned in list or query responses. The user interface receives only a masked suffix, provider label, status, version, and timestamps. [2]
 
-### Encryption Specifications
-- **Algorithm**: AES-256-GCM (Galois/Counter Mode) authenticated encryption.
-- **Key Derivation**: SHA-256 digest calculated over `process.env.JWT_SECRET`.
-- **Initialization Vector (IV)**: 16 bytes of cryptographically secure random bytes generated per encryption call (`crypto.randomBytes(16)`).
-- **Authentication Tag**: 16-byte GCM authentication tag appended to the ciphertext payload.
+Current vault ciphertext uses `AES-256-GCM`, a `jf-v2:` prefix, a fresh **12-byte IV**, and a 16-byte authentication tag. The default 32-byte vault key is stored in the current operating-system account’s **OS keychain**. If secure storage is unavailable, the operator can provide a local passphrase; Foundry derives the key with `scrypt` and a locally stored mode-600 salt file. [2]
 
-```
-Raw Secret + Random IV ──► AES-256-GCM ──► Ciphertext + Auth Tag ──► Encrypted Storage
-```
+If an operator loses both the OS credential-store key and the recovery passphrase, encrypted credentials cannot be recovered. The correct response is to re-enter provider credentials; Foundry has no secret-export mechanism.
 
----
+## Task scope and provider controls
 
-## 2. Path Containment & Conflict Prevention
+Gemini-generated tasks must contain explicit repository-relative allowed paths. If scope is missing, Foundry assigns a red-risk sentinel and blocks dispatch until an operator reviews the task. Active overlapping paths are reserved to reduce concurrent file collisions. Provider calls originate only from the local server process.
 
-To prevent autonomous agents from making uncoordinated, destructive changes across repository files, Jules Foundry enforces path containment policies:
+Jules session controls use operator actions, idempotency keys, short-lived control leases, and an audit ledger. Foundry does not silently approve plans, accept evidence, merge code, or redispatch work.
 
-### Allowed Paths Definition
-When Gemini compiles a prompt into a task graph, every task must explicitly define `allowedPaths` (e.g. `["src/components/Header.tsx", "src/hooks/useAuth.ts"]`).
+## Destructive actions and evidence
 
-### Scope Review Quarantine (`SCOPE_REVIEW_PATH`)
-If Gemini emits a task without concrete file paths, Foundry normalizes the task by inserting `__SCOPE_REVIEW_REQUIRED__` and assigning a `red` risk tier. Any dispatch attempt on a task containing `__SCOPE_REVIEW_REQUIRED__` is automatically rejected with a scope review block message.
+Initiatives with active Jules sessions cannot be deleted. Destructive requests require typed confirmation, record a precondition snapshot, and emit a ledger event. Task evidence, provider activity, and operator actions are stored with correlation and payload-digest metadata to support review without returning credential plaintext.
 
-### Active Path Reservation Lock
-When a task is dispatched, Foundry inspects all active sibling tasks (`reserved`, `dispatched`, `plan_gate`, `executing`) within the same initiative. If an active task shares an `allowedPath` with the dispatch candidate, the dispatch is blocked to prevent concurrent file collision:
+## Governance boundaries
 
-```ts
-const conflictingTask = activeSiblings.find(sibling =>
-  sibling.id !== record.task.id &&
-  parseList(sibling.allowedPaths).some(path => allowedPaths.includes(path))
-);
-if (conflictingTask) {
-  throw new Error(`Reservation conflict with active task '${conflictingTask.title}' on shared allowed paths.`);
-}
-```
+Read [SECURITY.md](../SECURITY.md) for private vulnerability reporting, [PRIVACY.md](../PRIVACY.md) for data handling, and [RELEASE_SCOPE.md](RELEASE_SCOPE.md) for the current supported audience and platform. Provider credentials, source code, and task content remain the operator’s responsibility; use least-privilege access and follow each provider’s terms.
 
----
+## References
 
-## 3. Concurrency Control & Operator Action Leases
-
-To eliminate race conditions when multiple operators interact with the same mission command deck:
-
-### Short-Lived Control Leases (`task_control_leases`)
-Executing session controls (`refresh`, `approve_plan`, `send_message`, `request_delete`, `set_local_hold`, `release_local_hold`, `reconcile`) acquires a 30-second lease locked by `taskId` and `inputDigest`.
-
-```ts
-const lease = await db.select().from(taskControlLeases).where(eq(taskControlLeases.taskId, taskId)).limit(1);
-if (lease && lease.expiresAt > new Date() && lease.controlDigest !== inputDigest) {
-  throw new TRPCError({
-    code: "CONFLICT",
-    message: "Another session control is in flight for this task. Refresh the command ledger and retry after it completes."
-  });
-}
-```
-
----
-
-## 4. Governed Destructive Actions
-
-Destructive operations (such as session deletion or initiative removal) are protected by multi-layered verification:
-
-1. **Active Session Lock**: Initiatives with active Jules sessions (`dispatched`, `plan_gate`, `executing`) cannot be deleted.
-2. **Typed Confirmation**: Destructive actions require the user to explicitly type the exact name of the entity (initiative title or Jules session name) into the confirmation control before submission.
-3. **Audit Ledger Logging**: Every destructive action generates an event in `task_events` and records the actor ID, timestamp, and precondition snapshot.
-
----
-
-## 5. Auditability & Provenance
-
-Jules Foundry maintains an append-only event ledger (`task_events`) that tracks every state transition, operator action, provider polling activity, and evidence verification result:
-
-- **Correlation IDs**: Distributed correlation tokens generated via `nanoid()` link client actions to backend background reconciliations.
-- **Payload Digests**: SHA-256 digests of payloads enable tamper-evident verification without storing sensitive input text in plain sight.
-- **Exportable Evidence Dossiers**: Operators can generate exportable markdown dossiers (`jules-foundry-task-{key}-dossier.md`) capturing full task history, acceptance criterion statuses, PR references, and event provenance.
+[1]: file:///home/ubuntu/jules-foundry/server/local-runtime.ts "Loopback bootstrap and session controls"
+[2]: file:///home/ubuntu/jules-foundry/server/services/vault.ts "Current v2 vault encryption implementation"
