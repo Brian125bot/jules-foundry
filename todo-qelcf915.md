@@ -53,3 +53,7 @@
 - [x] Inspect the clean staged release notes for target, Node requirement, checksum instructions, and declared limitations.
 - [x] Create the public GitHub `v1.0.0` technical-preview release and upload the five verified staged files.
 - [x] Verify the published GitHub Release URL, public state, tag, and exact five release assets.
+- [x] Confirm that the disposable live-provider configuration is unavailable; the secure credential request was declined.
+- [x] Defer the opt-in live-provider certification pending user-provided disposable credentials and retain it as a documented public-release prerequisite.
+- [x] Create a public-safe Linux technical-preview feedback submission and maintainer triage template.
+- [x] Review the template for alignment with release scope, support, privacy, and security-reporting guidance.

@@ -27,4 +27,16 @@ describe("public release governance", () => {
     expect(security).toContain("jf-v2:");
     expect(security).not.toContain("process.env.JWT_SECRET");
   });
+
+  it("ships a public-safe Linux technical-preview feedback and triage template", async () => {
+    const [feedback, readme, support] = await Promise.all([
+      text("../docs/TECHNICAL_PREVIEW_FEEDBACK_TRIAGE.md"), text("../README.md"), text("../SUPPORT.md"),
+    ]);
+    expect(feedback).toContain("linux-x64");
+    expect(feedback).toContain("Never include secrets");
+    expect(feedback).toContain("P0");
+    expect(feedback).toContain("SECURITY.md");
+    expect(readme).toContain("TECHNICAL_PREVIEW_FEEDBACK_TRIAGE.md");
+    expect(support).toContain("TECHNICAL_PREVIEW_FEEDBACK_TRIAGE.md");
+  });
 });
